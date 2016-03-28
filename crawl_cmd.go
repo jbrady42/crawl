@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"os"
 
-	"github.com/jbrady42/crawl/crawl"
+	"github.com/codegangsta/cli"
+	"github.com/jbrady42/crawl/core"
 	"github.com/jbrady42/crawl/util"
 )
 
@@ -49,7 +51,28 @@ func printMain() {
 }
 
 func main() {
+	app := cli.NewApp()
+	app.Commands = []cli.Command{
+		{
+			// Extract
+			Name:    "extract",
+			Aliases: []string{"e"},
+			Usage:   "Extract urls",
+			Action: func(c *cli.Context) {
+				extractMain()
+			},
+		},
+		{
+			// Download
+			Name:    "download",
+			Aliases: []string{"d"},
+			Usage:   "Download urls",
+			Action: func(c *cli.Context) {
+				downloadMain()
+			},
+		},
+	}
+
+	app.Run(os.Args)
 	// printMain()
-	// downloadMain()
-	extractMain()
 }
