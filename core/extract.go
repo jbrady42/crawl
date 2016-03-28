@@ -19,10 +19,11 @@ func ExtractMain(inQ chan string, outQ chan *PageResult) {
 		// 	continue
 		// }
 		links := ExtractLinks(page.Data)
+
+		// Basic filtering
+		links = filterDupLinks(links)
 		page.Links = links
 
-		// fmt.Println(links)
-		// page := downloadUrl(s)
 		outQ <- page
 	}
 }
@@ -73,4 +74,25 @@ func ExtractLinks(page *PageData) (res []*url.URL) {
 	}
 
 	return res
+}
+
+func filterDupLinks(links []*url.URL) []*url.URL {
+	var tmp []*url.URL
+	startLen := len(links)
+	mapSet := make(map[string]struct{})
+
+	for _, link := range links {
+		urlS := link.String() //SuperTrim(urlIn.Url.String())
+
+		// Add if its not there already
+		if _, ok := mapSet[urlS]; !ok {
+			tmp = append(tmp, link)
+			mapSet[urlS] = struct{}{}
+		} else {
+			//log.Printf("filterDupLinks: filtering duplicate url %s\n", urlS)
+		}
+	}
+	endLen := len(tmp)
+	log.Printf("filterDupLinks: removed %d duplicates\n", startLen-endLen)
+	return tmp
 }
