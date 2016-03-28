@@ -5,20 +5,31 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"strings"
+
+	"github.com/PuerkitoBio/purell"
 )
 
 func NewStdinReader() chan string {
 	out := make(chan string)
-	scan := bufio.NewScanner(os.Stdin)
+	// scan := bufio.NewScanner(os.Stdin)
+	reader := bufio.NewReader(os.Stdin)
 	go func() {
-		for scan.Scan() {
-			line := scan.Text()
-			strings.Trim(line, "\n \t")
+		line, err := reader.ReadString('\n')
+
+		for err == nil {
+			// line := scan.Text()
+			line = strings.Trim(line, "\n \t")
+
+			// fmt.Println(len(line))
 			if len(line) > 0 {
 				out <- line
 			}
+
+			// Next
+			line, err = reader.ReadString('\n')
 		}
 		close(out)
 	}()
@@ -42,4 +53,34 @@ func ToJSON(data interface{}) []byte {
 
 func ToJSONStr(data interface{}) string {
 	return string(ToJSON(data))
+}
+
+func ParseUrl(str string) (res *url.URL) {
+	// Normalize
+	normalized, err := purell.NormalizeURLString(str,
+		purell.FlagsUsuallySafeGreedy|purell.FlagRemoveDuplicateSlashes|purell.FlagRemoveFragment)
+
+	if err != nil {
+		log.Printf("Error normalizing url %v\n", str)
+		return nil
+	}
+	// Then parse
+	res, err = url.Parse(normalized)
+	if err != nil {
+		log.Printf("Error parsing url %v\n", str)
+		return nil
+	}
+	return res
+}
+
+func ParseUrlEscaped(str string) *url.URL {
+	inUrl := ParseUrl(str)
+	if inUrl == nil {
+		return nil
+	}
+	// Better handle query strings
+	q := inUrl.Query()
+	inUrl.RawQuery = q.Encode()
+
+	return inUrl
 }

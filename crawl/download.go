@@ -7,14 +7,14 @@ import (
 	"net/http"
 )
 
-func DownloadMain(inQ chan string, outQ chan *PageData, opts CrawlOpts) {
+func DownloadMain(inQ chan string, outQ chan *PageResult, opts CrawlOpts) {
 	for s := range inQ {
 		page := downloadUrl(s)
 		outQ <- page
 	}
 }
 
-func downloadUrl(url string) (page *PageData) {
+func downloadUrl(url string) (page *PageResult) {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
 	req.Header.Add("Accept-Encoding", "identity")

@@ -1,7 +1,10 @@
 package crawl
 
 import (
+	"encoding/json"
+	"log"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -12,10 +15,12 @@ type Page struct {
 	VisitedAt string
 }
 
-type FetchResult struct {
+type PageResult struct {
 	Data    *PageData
 	Success bool
 	Message string
+
+	Links []*url.URL
 }
 
 type PageData struct {
@@ -34,7 +39,7 @@ type CrawlOpts struct {
 	RateLimit float64
 }
 
-func NewPageData(url string, resp *http.Response, body []byte) *PageData {
+func NewPageData(url string, resp *http.Response, body []byte) *PageResult {
 	pd := PageData{
 		Url:        url,
 		Body:       string(body),
@@ -45,10 +50,16 @@ func NewPageData(url string, resp *http.Response, body []byte) *PageData {
 		Header:     resp.Header,
 		Trailer:    resp.Trailer,
 	}
-	return &pd
+
+	fr := PageResult{
+		Data:    &pd,
+		Success: true,
+		Message: "",
+	}
+	return &fr
 }
 
-func NewFailedResult(url string, reason string) *PageData {
+func NewFailedResult(url string, reason string) *PageResult {
 	pd := PageData{
 		Url:        url,
 		Body:       "",
@@ -60,11 +71,22 @@ func NewFailedResult(url string, reason string) *PageData {
 		Trailer:    nil,
 	}
 
-	fr := FetchResult{
+	fr := PageResult{
 		Data:    &pd,
 		Success: false,
 		Message: "failed: " + reason,
 	}
-	_ = fr
-	return &pd
+	return &fr
+}
+
+func PageDataFromLine(line string) *PageResult {
+	var page PageResult
+
+	data := []byte(line)
+	err := json.Unmarshal(data, &page)
+	if err != nil {
+		log.Println("Error marshaling line")
+		log.Println(err)
+	}
+	return &page
 }
