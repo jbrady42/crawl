@@ -5,16 +5,18 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+
+	"github.com/jbrady42/crawl/data"
 )
 
-func DownloadMain(inQ chan string, outQ chan *PageResult, opts CrawlOpts) {
+func DownloadMain(inQ chan string, outQ chan *data.PageResult, opts CrawlOpts) {
 	for s := range inQ {
 		page := downloadUrl(s)
 		outQ <- page
 	}
 }
 
-func downloadUrl(url string) (page *PageResult) {
+func downloadUrl(url string) (page *data.PageResult) {
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
 	req.Header.Add("Accept-Encoding", "identity")
@@ -22,7 +24,7 @@ func downloadUrl(url string) (page *PageResult) {
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("Error downloading %s : %s\n", url, err)
-		return NewFailedResult(url, err.Error())
+		return data.NewFailedResult(url, err.Error())
 	}
 
 	var body []byte
@@ -35,6 +37,6 @@ func downloadUrl(url string) (page *PageResult) {
 	// Close con
 	resp.Body.Close()
 
-	pd := NewPageData(url, resp, body)
+	pd := data.NewPageData(url, resp, body)
 	return pd
 }

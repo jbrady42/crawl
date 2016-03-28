@@ -2,18 +2,22 @@ package crawl
 
 import (
 	"log"
+	"net"
 	"net/url"
 	"strings"
 
+	"golang.org/x/net/publicsuffix"
+
 	"github.com/PuerkitoBio/goquery"
 
+	"github.com/jbrady42/crawl/data"
 	"github.com/jbrady42/crawl/util"
 )
 
-func ExtractMain(inQ chan string, outQ chan *PageResult) {
+func ExtractMain(inQ chan string, outQ chan *data.PageResult) {
 	for s := range inQ {
 		// Parse page data
-		page := PageDataFromLine(s)
+		page := data.PageDataFromLine(s)
 		// if len(page.Url) < 4 {
 		// 	log.Printf("Error, not extracting. Bad url in line %s\n", line)
 		// 	continue
@@ -22,6 +26,7 @@ func ExtractMain(inQ chan string, outQ chan *PageResult) {
 
 		// Basic filtering
 		links = filterDupLinks(links)
+		links = filterRegLinks(links)
 		page.Links = links
 
 		outQ <- page
@@ -29,7 +34,7 @@ func ExtractMain(inQ chan string, outQ chan *PageResult) {
 }
 
 // TODO make sure urls are normalized
-func ExtractLinks(page *PageData) (res []*url.URL) {
+func ExtractLinks(page *data.PageData) (res []*url.URL) {
 	pageReader := strings.NewReader(page.Body)
 	//defer pageReader.Close()
 
@@ -68,12 +73,16 @@ func ExtractLinks(page *PageData) (res []*url.URL) {
 
 			// Transform urls
 			// newU = opts.Extender.TransformUrl(newU)
-
+			newU = transformUrl(newU)
 			res = append(res, newU)
 		}
 	}
 
 	return res
+}
+
+func transformUrl(info *url.URL) *url.URL {
+	return util.SiteRoot(info)
 }
 
 func filterDupLinks(links []*url.URL) []*url.URL {
@@ -95,4 +104,58 @@ func filterDupLinks(links []*url.URL) []*url.URL {
 	endLen := len(tmp)
 	log.Printf("filterDupLinks: removed %d duplicates\n", startLen-endLen)
 	return tmp
+}
+
+func filterRegLinks(links []*url.URL) []*url.URL {
+	var filterTmp []*url.URL
+	for _, link := range links {
+		urlStr := link.String()
+		if FilterUrl(link) {
+			log.Printf("filterPageLinksWorker: filtering url %s\n", urlStr)
+		} else {
+			filterTmp = append(filterTmp, link)
+		}
+	}
+	return filterTmp
+}
+
+// Probably should go elsewhere
+func FilterUrl(inUrl *url.URL) bool {
+	// Check if allowed scheme
+	allowedSchemes := []string{"http", "https"}
+
+	if !util.Conatins(allowedSchemes, inUrl.Scheme) {
+		log.Printf("Filtering scheme %v\n", inUrl.Scheme)
+		return true
+	}
+
+	// Host / Domain checks
+
+	host, _ := publicsuffix.EffectiveTLDPlusOne(inUrl.Host)
+
+	// Check for no domain
+	if host == "" {
+		log.Println("Filtering empty host")
+		return true
+	}
+
+	// Check for allowed domains
+	/*
+		_, icann := publicsuffix.PublicSuffix(host)
+		if !icann {
+			log.Println("filtering bad host")
+			return true
+		}
+	*/
+
+	// Check port
+	_, port, err := net.SplitHostPort(inUrl.Host)
+	if err != nil {
+		//log.Println(err)
+	} else if port != "80" || port != "443" {
+		log.Println("Filtering port ", port)
+		return true
+	}
+
+	return false
 }

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/PuerkitoBio/purell"
@@ -83,4 +84,25 @@ func ParseUrlEscaped(str string) *url.URL {
 	inUrl.RawQuery = q.Encode()
 
 	return inUrl
+}
+
+func EscapedUrlStr(str string) string {
+	return ParseUrlEscaped(str).String()
+}
+
+func SiteRoot(info *url.URL) *url.URL {
+	ret := &url.URL{
+		Host:   info.Host,
+		Scheme: info.Scheme,
+		User:   info.User,
+		//Path:   "/",
+	}
+	return ret
+}
+
+func Conatins(list []string, item string) bool {
+	sort.Strings(list)
+	i := sort.SearchStrings(list, item)
+	cont := i < len(list) && list[i] == item
+	return cont
 }

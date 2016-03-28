@@ -6,12 +6,13 @@ import (
 
 	"github.com/codegangsta/cli"
 	"github.com/jbrady42/crawl/core"
+	"github.com/jbrady42/crawl/data"
 	"github.com/jbrady42/crawl/util"
 )
 
 func downloadMain() {
 	inQ := util.NewStdinReader()
-	outQ := make(chan *crawl.PageResult)
+	outQ := make(chan *data.PageResult)
 	opts := crawl.CrawlOpts{1, 1.0}
 
 	go func() {
@@ -27,7 +28,7 @@ func downloadMain() {
 
 func extractMain() {
 	inQ := util.NewStdinReader()
-	outQ := make(chan *crawl.PageResult)
+	outQ := make(chan *data.PageResult)
 
 	go func() {
 		crawl.ExtractMain(inQ, outQ)
