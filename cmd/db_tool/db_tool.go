@@ -18,6 +18,11 @@ type Site struct {
 	gorm.Model
 	Url     string `gorm:"not null;unique"`
 	Visited bool
+	TLD     string
+}
+
+func newSite(urlS string) Site {
+	return Site{Url: urlS, TLD: util.UrlTopHost(urlS)}
 }
 
 func connectDB() *gorm.DB {
@@ -62,7 +67,7 @@ func importMain(fun func(string)) {
 	db = connectDB()
 	setupDB(db)
 
-	fmt.Println("DB Complete")
+	log.Println("DB Complete")
 
 	inQ := util.NewStdinReader()
 
@@ -78,13 +83,13 @@ func importPage(line string) {
 	link := page.Data.Url
 
 	var site Site
-	db.Where(Site{Url: link}).Assign(Site{Visited: true}).FirstOrCreate(&site)
+	db.Where(newSite(link)).Assign(Site{Visited: true}).FirstOrCreate(&site)
 	log.Println("Added page:", link)
 }
 
 func importLink(link string) {
 	var site Site
-	db.Where(Site{Url: link}).Attrs(Site{Visited: false}).FirstOrCreate(&site)
+	db.Where(newSite(link)).Attrs(Site{Visited: false}).FirstOrCreate(&site)
 	if site.Visited {
 		log.Println("Existing url:", link)
 	} else {
@@ -100,15 +105,16 @@ func getNextUrlList(limit int) {
 	setupDB(db)
 
 	var res []Site
-	db.Limit(limit).Where(map[string]interface{}{"visited": false}).Find(&res)
+	db.Limit(limit).Order("random()").Where(map[string]interface{}{"visited": false}).Find(&res)
 	// db.Find(&res)
 	for _, a := range res {
 		fmt.Println(a.Url)
 	}
+	log.Println("Done")
 }
 
 func main() {
-
+	var url_count int
 	app := cli.NewApp()
 	app.Commands = []cli.Command{
 		{
@@ -131,10 +137,18 @@ func main() {
 		},
 		{
 			Name:    "next_urls",
-			Aliases: []string{"u"},
+			Aliases: []string{"n"},
 			Usage:   "Import links",
+			Flags: []cli.Flag{
+				cli.IntFlag{
+					Name:        "limit",
+					Value:       10,
+					Usage:       "Number of urls",
+					Destination: &url_count,
+				},
+			},
 			Action: func(c *cli.Context) {
-				getNextUrlList(100)
+				getNextUrlList(url_count)
 			},
 		},
 	}
