@@ -13,10 +13,14 @@ import (
 func downloadMain() {
 	inQ := util.NewStdinReader()
 	outQ := make(chan *data.PageResult)
-	opts := crawl.CrawlOpts{1, 1.0}
+	// opts := crawl.CrawlOpts{workers, 1.0}
+
+	// Setup crawler
+	crawl := crawl.NewCrawler(workers, false)
+	crawl.MaxPageBytes = sizeLimit
 
 	go func() {
-		crawl.DownloadMain(inQ, outQ, opts)
+		crawl.Download(inQ, outQ)
 		close(outQ)
 	}()
 
@@ -51,7 +55,11 @@ func printMain() {
 	}
 }
 
+var workers int
+var sizeLimit int
+
 func main() {
+
 	app := cli.NewApp()
 	app.Commands = []cli.Command{
 		{
@@ -68,6 +76,20 @@ func main() {
 			Name:    "download",
 			Aliases: []string{"d"},
 			Usage:   "Download urls",
+			Flags: []cli.Flag{
+				cli.IntFlag{
+					Name:        "workers",
+					Value:       1,
+					Usage:       "Number of download workers",
+					Destination: &workers,
+				},
+				cli.IntFlag{
+					Name:        "max-bytes",
+					Value:       0.0,
+					Usage:       "Limit download page size rate. 0 for none.",
+					Destination: &sizeLimit,
+				},
+			},
 			Action: func(c *cli.Context) {
 				downloadMain()
 			},
