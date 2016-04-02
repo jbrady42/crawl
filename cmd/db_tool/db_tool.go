@@ -1,11 +1,13 @@
 package main
 
 import (
+	"crypto/md5"
 	"fmt"
 	"log"
 	"os"
 
 	"github.com/codegangsta/cli"
+	"github.com/hashicorp/golang-lru"
 	"github.com/jbrady42/crawl/data"
 	"github.com/jbrady42/crawl/util"
 	"github.com/jinzhu/gorm"
@@ -19,6 +21,7 @@ type Site struct {
 	Url     string `gorm:"not null;unique"`
 	Visited bool
 	TLD     string
+	Queued  bool
 }
 
 func newSite(urlS string) Site {
@@ -78,6 +81,21 @@ func importMain(fun func(string)) {
 	}
 }
 
+func importLinksMain() {
+	db = connectDB()
+	setupDB(db)
+
+	log.Println("DB Complete")
+
+	cache, _ := lru.New(500000)
+
+	inQ := util.NewStdinReader()
+
+	for line := range inQ {
+		importLink(line, cache)
+	}
+}
+
 func importPage(line string) {
 	page := data.PageDataFromLine(line)
 	link := page.Data.Url
@@ -87,13 +105,21 @@ func importPage(line string) {
 	log.Println("Added page:", link)
 }
 
-func importLink(link string) {
-	var site Site
-	db.Where(newSite(link)).Attrs(Site{Visited: false}).FirstOrCreate(&site)
-	if site.Visited {
-		log.Println("Existing url:", link)
+func importLink(link string, cache *lru.Cache) {
+	key := md5.Sum([]byte(link))
+
+	if !cache.Contains(key) {
+		cache.Add(key, struct{}{})
+
+		var site Site
+		db.Where(newSite(link)).Attrs(Site{Visited: false}).FirstOrCreate(&site)
+		if site.Visited {
+			log.Println("Existing url:", link)
+		} else {
+			log.Println("Added url:", link)
+		}
 	} else {
-		log.Println("Added url:", link)
+		log.Println("Existing cached:", link)
 	}
 
 	// db.Save(&site)
@@ -132,7 +158,7 @@ func main() {
 			Aliases: []string{"l"},
 			Usage:   "Import links",
 			Action: func(c *cli.Context) {
-				importMain(importLink)
+				importLinksMain()
 			},
 		},
 		{
