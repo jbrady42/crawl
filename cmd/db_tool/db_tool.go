@@ -18,10 +18,13 @@ var db *gorm.DB
 
 type Site struct {
 	gorm.Model
-	Url     string `gorm:"not null;unique"`
+	Url     string `gorm:"not null;unique_index"`
 	Visited bool
-	TLD     string
+	TLD     string `gorm:"index"`
 	Queued  bool
+	Success bool
+	Message string
+	IP      string
 }
 
 func newSite(urlS string) Site {
@@ -32,7 +35,7 @@ func connectDB() *gorm.DB {
 	dbUrl := os.Getenv("DATABASE_URL")
 	conStr, _ := pq.ParseURL(dbUrl)
 	conStr += fmt.Sprintf(" sslmode=%v", "disable") //require
-	log.Println(conStr)
+	// log.Println(conStr)
 	db, err := gorm.Open("postgres", conStr)
 	if err != nil {
 		log.Fatal("Can't connect to db")
@@ -67,8 +70,8 @@ func seedDB(db *gorm.DB) {
 }
 
 func importMain(fun func(string)) {
-	db = connectDB()
-	setupDB(db)
+	// db = connectDB()
+	// setupDB(db)
 
 	log.Println("DB Complete")
 
@@ -82,10 +85,10 @@ func importMain(fun func(string)) {
 }
 
 func importLinksMain() {
-	db = connectDB()
-	setupDB(db)
+	// db = connectDB()
+	// setupDB(db)
 
-	log.Println("DB Complete")
+	// log.Println("DB Complete")
 
 	cache, _ := lru.New(500000)
 
@@ -99,10 +102,32 @@ func importLinksMain() {
 func importPage(line string) {
 	page := data.PageDataFromLine(line)
 	link := page.Data.Url
+	success := page.Success
 
 	var site Site
-	db.Where(newSite(link)).Assign(Site{Visited: true}).FirstOrCreate(&site)
+	db.Where(newSite(link)).Attrs(Site{Visited: true}).FirstOrInit(&site)
+	site.Success = success
+	if !success {
+		site.Message = page.Message
+	}
+	db.Save(&site)
+
 	log.Println("Added page:", link)
+}
+
+func importResolve(line string) {
+	page := data.ResolveResultFromLine(line)
+	url := page.Url
+
+	var site Site
+	db.Where(newSite(url)).Find(&site)
+	site.IP = page.IP.String()
+	site.Message = page.Message
+	db.Save(&site)
+
+	// log.Println(site)
+
+	log.Println("Added ip for:", url)
 }
 
 func importLink(link string, cache *lru.Cache) {
@@ -117,6 +142,7 @@ func importLink(link string, cache *lru.Cache) {
 			log.Println("Existing url:", link)
 		} else {
 			log.Println("Added url:", link)
+			fmt.Println(link)
 		}
 	} else {
 		log.Println("Existing cached:", link)
@@ -127,8 +153,8 @@ func importLink(link string, cache *lru.Cache) {
 }
 
 func getNextUrlList(limit int) {
-	db = connectDB()
-	setupDB(db)
+	// db = connectDB()
+	// setupDB(db)
 
 	var res []Site
 	db.Limit(limit).Order("random()").Where(map[string]interface{}{"visited": false}).Find(&res)
@@ -140,6 +166,9 @@ func getNextUrlList(limit int) {
 }
 
 func main() {
+	db = connectDB()
+	setupDB(db)
+
 	var url_count int
 	app := cli.NewApp()
 	app.Commands = []cli.Command{
@@ -175,6 +204,15 @@ func main() {
 			},
 			Action: func(c *cli.Context) {
 				getNextUrlList(url_count)
+			},
+		},
+		{
+			// Resolve
+			Name:    "resolve",
+			Aliases: []string{"r"},
+			Usage:   "Import ips",
+			Action: func(c *cli.Context) {
+				importMain(importResolve)
 			},
 		},
 	}
