@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"strings"
 
 	"github.com/codegangsta/cli"
 	"github.com/jbrady42/crawl/core"
@@ -21,6 +23,27 @@ func downloadMain() {
 
 	go func() {
 		crawl.Download(inQ, outQ)
+		close(outQ)
+	}()
+
+	//Output
+	for a := range outQ {
+		fmt.Println(util.ToJSONStr(a))
+	}
+}
+
+func resolveMain() {
+	inQ := util.NewStdinReader()
+	outQ := make(chan *data.ResolveResult)
+
+	servers := strings.Split(resolverStr, ",")
+	log.Println("Resolvers:", servers)
+	// Setup crawler
+	crawl := crawl.NewCrawler(workers, false)
+	crawl.ResolveServers = servers
+
+	go func() {
+		crawl.Resolve(inQ, outQ)
 		close(outQ)
 	}()
 
@@ -57,6 +80,7 @@ func printMain() {
 
 var workers int
 var sizeLimit int
+var resolverStr string
 
 func main() {
 
@@ -92,6 +116,29 @@ func main() {
 			},
 			Action: func(c *cli.Context) {
 				downloadMain()
+			},
+		},
+		{
+			// Resolve
+			Name:    "resolve",
+			Aliases: []string{"r"},
+			Usage:   "Resolve urls",
+			Flags: []cli.Flag{
+				cli.IntFlag{
+					Name:        "workers",
+					Value:       1,
+					Usage:       "Number of resolve workers",
+					Destination: &workers,
+				},
+				cli.StringFlag{
+					Name:        "servers",
+					Value:       "8.8.8.8",
+					Usage:       "Comma separated list of resolve servers",
+					Destination: &resolverStr,
+				},
+			},
+			Action: func(c *cli.Context) {
+				resolveMain()
 			},
 		},
 	}

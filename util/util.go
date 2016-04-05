@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/url"
 	"os"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -110,16 +110,14 @@ func Conatins(list []string, item string) bool {
 	return cont
 }
 
-var ipReg = regexp.MustCompile("^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$")
-
 func UrlTopHost(urlStr string) string {
 	uRl := ParseUrlEscaped(urlStr)
 	host := ""
 	if uRl != nil {
 		host, _ = publicsuffix.EffectiveTLDPlusOne(uRl.Host)
 	}
-	isIp := ipReg.MatchString(uRl.Host)
-	if isIp {
+
+	if ip := net.ParseIP(uRl.Host); ip != nil {
 		//log.Println("Matched IP as host")
 		host = uRl.Host
 	}
