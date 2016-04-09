@@ -46,6 +46,7 @@ func (t *Crawler) Download(inQ chan string, outQ chan *data.PageResult) {
 	var wg sync.WaitGroup
 	wg.Add(t.WorkerCount)
 	for i := 0; i < t.WorkerCount; i++ {
+		time.Sleep(25 * time.Millisecond)
 		go func() {
 			resolver := DefaultResolver()
 			worker := DownloadWorker{t, nil, resolver, nil}
@@ -144,7 +145,7 @@ func (t *DownloadWorker) dial(network, address string) (net.Conn, error) {
 		resolvedStr = resolved.String()
 	} else {
 		resolvedStr = t.resolvedIp.String()
-		log.Println("Using resolved ip", resolvedStr)
+		// log.Println("Using resolved ip", resolvedStr)
 	}
 
 	// Recombine port

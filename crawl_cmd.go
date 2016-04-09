@@ -14,7 +14,7 @@ import (
 
 func downloadMain() {
 	inQ := util.NewStdinReader()
-	outQ := make(chan *data.PageResult)
+	outQ := make(chan *data.PageResult, workers)
 	// opts := crawl.CrawlOpts{workers, 1.0}
 
 	// Setup crawler
@@ -34,7 +34,7 @@ func downloadMain() {
 
 func resolveMain() {
 	inQ := util.NewStdinReader()
-	outQ := make(chan *data.ResolveResult)
+	outQ := make(chan *data.ResolveResult, workers)
 
 	servers := strings.Split(resolverStr, ",")
 	log.Println("Resolvers:", servers)

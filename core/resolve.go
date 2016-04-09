@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/bogdanovich/dns_resolver"
 	"github.com/jbrady42/crawl/data"
@@ -18,6 +19,7 @@ type ResolveWorker struct {
 func DefaultResolver() (resolver *dns_resolver.DnsResolver) {
 	resolver = dns_resolver.New([]string{"208.67.222.222", "208.67.220.220", "8.8.8.8", "8.8.4.4"})
 	resolver.RetryTimes = 3
+	resolver.ReuseConnection = true
 	return resolver
 }
 
@@ -27,7 +29,7 @@ func NewResolver(servers []string) (resolver *dns_resolver.DnsResolver) {
 	copy(tmpServer, servers)
 
 	resolver = dns_resolver.New(tmpServer)
-	resolver.RetryTimes = 3
+	resolver.ReuseConnection = true
 	return resolver
 }
 
@@ -35,6 +37,7 @@ func (t *Crawler) Resolve(inQ chan string, outQ chan *data.ResolveResult) {
 	var wg sync.WaitGroup
 	wg.Add(t.WorkerCount)
 	for i := 0; i < t.WorkerCount; i++ {
+		time.Sleep(25 * time.Millisecond)
 		go func() {
 			resolver := NewResolver(t.ResolveServers)
 			worker := ResolveWorker{resolver}
