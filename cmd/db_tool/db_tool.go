@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/codegangsta/cli"
 	"github.com/hashicorp/golang-lru"
@@ -18,13 +21,13 @@ var db *gorm.DB
 
 type Site struct {
 	gorm.Model
-	Url     string `gorm:"not null;unique_index"`
-	Visited bool
-	TLD     string `gorm:"index"`
-	Queued  bool
-	Success bool
-	Message string
-	IP      string
+	Url      string `gorm:"not null;unique_index"`
+	Visited  bool
+	TLD      string `gorm:"index"`
+	QueuedAt *time.Time
+	Success  bool
+	Message  string
+	IP       string
 }
 
 func newSite(urlS string) Site {
@@ -70,11 +73,6 @@ func seedDB(db *gorm.DB) {
 }
 
 func importMain(fun func(string)) {
-	// db = connectDB()
-	// setupDB(db)
-
-	log.Println("DB Complete")
-
 	inQ := util.NewStdinReader()
 
 	for line := range inQ {
@@ -85,12 +83,7 @@ func importMain(fun func(string)) {
 }
 
 func importLinksMain() {
-	// db = connectDB()
-	// setupDB(db)
-
-	// log.Println("DB Complete")
-
-	cache, _ := lru.New(500000)
+	cache, _ := lru.New(1000000)
 
 	inQ := util.NewStdinReader()
 
@@ -105,11 +98,15 @@ func importPage(line string) {
 	success := page.Success
 
 	var site Site
-	db.Where(newSite(link)).Attrs(Site{Visited: true}).FirstOrInit(&site)
+	db.Where(newSite(link)).FirstOrInit(&site)
 	site.Success = success
 	if !success {
 		site.Message = page.Message
 	}
+
+	// Clear queued
+	site.QueuedAt = nil
+	site.Visited = true
 	db.Save(&site)
 
 	log.Println("Added page:", link)
@@ -130,6 +127,58 @@ func importResolve(line string) {
 	log.Println("Added ip for:", url)
 }
 
+func importQueued() {
+	inQ := util.NewStdinReader()
+
+	// PG max params 65535
+	batchSize := 1000
+	count := 0
+
+	var ids []int
+	var buff []string
+
+	for line := range inQ {
+
+		parts := strings.Split(line, "\t")
+		id, _ := strconv.Atoi(parts[0])
+		ids = append(ids, id)
+
+		if len(parts) < 3 {
+			log.Println(parts)
+		}
+		item := strings.Join(parts[1:], "\t")
+		buff = append(buff, item)
+		// fmt.Println(item)
+
+		if len(ids) > batchSize {
+			log.Println("Saving batch", count)
+			db.Table("sites").Where("id IN (?)", ids).Updates(map[string]interface{}{"queued_at": &currentTime})
+			log.Println("Writing	 batch", count)
+			printList(buff)
+
+			ids = nil
+			ids = []int{}
+			buff = nil
+			buff = []string{}
+			count += 1
+		}
+	}
+
+	if len(ids) > 0 {
+		log.Println("Saving last batch", count)
+		db.Table("sites").Where("id IN (?)", ids).Updates(map[string]interface{}{"queued_at": &currentTime})
+		log.Println("Writing	 batch", count)
+		printList(buff)
+	}
+
+}
+
+func printList(list []string) {
+	for _, s := range list {
+		fmt.Println(s)
+	}
+}
+
 func importLink(link string, cache *lru.Cache) {
 	key := md5.Sum([]byte(link))
 
@@ -137,12 +186,16 @@ func importLink(link string, cache *lru.Cache) {
 		cache.Add(key, struct{}{})
 
 		var site Site
-		db.Where(newSite(link)).Attrs(Site{Visited: false}).FirstOrCreate(&site)
-		if site.Visited {
-			log.Println("Existing url:", link)
-		} else {
+		newUrl := db.Where(newSite(link)).Find(&site).RecordNotFound()
+		if newUrl {
+			site := newSite(link)
+
+			db.Create(&site)
 			log.Println("Added url:", link)
 			fmt.Println(link)
+
+		} else {
+			log.Println("Existing url:", link)
 		}
 	} else {
 		log.Println("Existing cached:", link)
@@ -165,7 +218,11 @@ func getNextUrlList(limit int) {
 	log.Println("Done")
 }
 
+var currentTime time.Time
+
 func main() {
+	currentTime = time.Now()
+
 	db = connectDB()
 	setupDB(db)
 
@@ -213,6 +270,15 @@ func main() {
 			Usage:   "Import ips",
 			Action: func(c *cli.Context) {
 				importMain(importResolve)
+			},
+		},
+		{
+			// Queue
+			Name:    "queue",
+			Aliases: []string{"r"},
+			Usage:   "Import queued",
+			Action: func(c *cli.Context) {
+				importQueued()
 			},
 		},
 	}
