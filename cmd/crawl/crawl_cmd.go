@@ -18,7 +18,7 @@ func downloadMain() {
 	// opts := crawl.CrawlOpts{workers, 1.0}
 
 	// Setup crawler
-	crawl := core.NewCrawler(workers, false)
+	crawl := core.NewCrawler(workers, groupHost)
 	crawl.MaxPageBytes = sizeLimit
 
 	go func() {
@@ -81,6 +81,7 @@ func printMain() {
 var workers int
 var sizeLimit int
 var resolverStr string
+var groupHost bool
 
 func main() {
 
@@ -112,6 +113,11 @@ func main() {
 					Value:       0.0,
 					Usage:       "Limit download page size rate. 0 for none.",
 					Destination: &sizeLimit,
+				},
+				cli.BoolFlag{
+					Name:        "host",
+					Usage:       "Urls are input in groups by host",
+					Destination: &groupHost,
 				},
 			},
 			Action: func(c *cli.Context) {
