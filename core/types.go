@@ -1,4 +1,4 @@
-package crawl
+package core
 
 type Page struct {
 	Url       string

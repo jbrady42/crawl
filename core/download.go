@@ -1,4 +1,4 @@
-package crawl
+package core
 
 import (
 	"io"
@@ -12,34 +12,15 @@ import (
 
 	"github.com/bogdanovich/dns_resolver"
 	"github.com/jbrady42/crawl/data"
-	"github.com/juju/ratelimit"
 )
 
 var defaultTimeout = time.Duration(60 * time.Second)
 
-type Crawler struct {
-	WorkerCount    int
-	GroupByHost    bool
-	RateLimitMB    float64
-	RateBucket     *ratelimit.Bucket
-	MaxPageBytes   int
-	ResolveServers []string
-}
-
-func NewCrawler(workers int, groupHost bool) *Crawler {
-
-	crawler := &Crawler{
-		WorkerCount:  workers,
-		GroupByHost:  groupHost,
-		RateLimitMB:  0.0,
-		RateBucket:   nil,
-		MaxPageBytes: -1,
-	}
-
-	// Setup rate limiting
-	//SetRateLimited(0.0)
-
-	return crawler
+type DownloadWorker struct {
+	crawler    *Crawler
+	client     *http.Client
+	resolver   *dns_resolver.DnsResolver
+	resolvedIp net.IP
 }
 
 func (t *Crawler) Download(inQ chan string, outQ chan *data.PageResult) {
@@ -50,7 +31,7 @@ func (t *Crawler) Download(inQ chan string, outQ chan *data.PageResult) {
 		go func() {
 			resolver := DefaultResolver()
 			worker := DownloadWorker{t, nil, resolver, nil}
-			client := getClient(resolver, &worker)
+			client := getHttpClient(resolver, &worker)
 			worker.client = client
 
 			worker.downloadWorker(inQ, outQ)
@@ -60,7 +41,7 @@ func (t *Crawler) Download(inQ chan string, outQ chan *data.PageResult) {
 	wg.Wait()
 }
 
-func getClient(resolver *dns_resolver.DnsResolver, worker *DownloadWorker) (client *http.Client) {
+func getHttpClient(resolver *dns_resolver.DnsResolver, worker *DownloadWorker) (client *http.Client) {
 	trans := &http.Transport{
 		Dial: func(network, address string) (net.Conn, error) {
 			return worker.dial(network, address)
@@ -76,13 +57,6 @@ func getClient(resolver *dns_resolver.DnsResolver, worker *DownloadWorker) (clie
 	}
 
 	return client
-}
-
-type DownloadWorker struct {
-	crawler    *Crawler
-	client     *http.Client
-	resolver   *dns_resolver.DnsResolver
-	resolvedIp net.IP
 }
 
 func (t *DownloadWorker) downloadWorker(inQ chan string, outQ chan *data.PageResult) {

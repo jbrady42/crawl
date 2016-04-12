@@ -18,7 +18,7 @@ func downloadMain() {
 	// opts := crawl.CrawlOpts{workers, 1.0}
 
 	// Setup crawler
-	crawl := crawl.NewCrawler(workers, false)
+	crawl := core.NewCrawler(workers, false)
 	crawl.MaxPageBytes = sizeLimit
 
 	go func() {
@@ -39,7 +39,7 @@ func resolveMain() {
 	servers := strings.Split(resolverStr, ",")
 	log.Println("Resolvers:", servers)
 	// Setup crawler
-	crawl := crawl.NewCrawler(workers, false)
+	crawl := core.NewCrawler(workers, false)
 	crawl.ResolveServers = servers
 
 	go func() {
@@ -58,7 +58,7 @@ func extractMain() {
 	outQ := make(chan *data.PageResult)
 
 	go func() {
-		crawl.ExtractMain(inQ, outQ)
+		core.ExtractMain(inQ, outQ)
 		close(outQ)
 	}()
 
