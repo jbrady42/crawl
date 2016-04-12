@@ -17,6 +17,7 @@ import (
 
 var defaultTimeout = time.Duration(60 * time.Second)
 var hostCrawlDelay = time.Duration(1 * time.Second)
+var maxBatchItems = 50
 
 type DownloadWorker struct {
 	crawler     *Crawler
@@ -106,8 +107,7 @@ func toDownloadInfo(inQ chan string, outQ chan *DownloadInfo) {
 }
 
 func toDownloadInfoBatches(inQ chan string, outQ chan chan *DownloadInfo) {
-	maxItems := 50
-	infoQ := make(chan *DownloadInfo, maxItems)
+	infoQ := make(chan *DownloadInfo, maxBatchItems)
 
 	var currentHost net.IP
 	var lastHost net.IP
@@ -116,7 +116,6 @@ func toDownloadInfoBatches(inQ chan string, outQ chan chan *DownloadInfo) {
 	for s := range inQ {
 		info := newDownloadInfo(s)
 		currentHost = info.IP
-		log.Println(currentHost, lastHost)
 
 		if first {
 			first = false
@@ -129,7 +128,7 @@ func toDownloadInfoBatches(inQ chan string, outQ chan chan *DownloadInfo) {
 			// Start new batch
 			log.Println("Adding batch ", lastHost)
 			first = true
-			infoQ = make(chan *DownloadInfo, maxItems)
+			infoQ = make(chan *DownloadInfo, maxBatchItems)
 		}
 
 		infoQ <- info
@@ -156,7 +155,6 @@ func (t *DownloadWorker) downloadWorker(inQ chan *DownloadInfo, outQ chan *data.
 
 		// Sleep if needed
 		if t.crawler.GroupByHost && len(inQ) > 0 {
-			log.Println("Wait")
 			time.Sleep(hostCrawlDelay)
 		}
 	}
