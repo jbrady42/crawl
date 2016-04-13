@@ -46,7 +46,7 @@ func newDownloadInfo(s string) *DownloadInfo {
 	return &DownloadInfo{Url: urlStr, IP: ip}
 }
 
-func (t *Crawler) Download(inQ chan string, outQ chan *data.PageResult) {
+func (t *Crawler) Download(inQ <-chan string, outQ chan<- *data.PageResult) {
 	var wg sync.WaitGroup
 
 	var infoQ chan *DownloadInfo
@@ -75,7 +75,7 @@ func (t *Crawler) Download(inQ chan string, outQ chan *data.PageResult) {
 	log.Println("Exiting Download")
 }
 
-func (t *Crawler) launchBatchDownloadWorker(batchQ chan chan *DownloadInfo, outQ chan *data.PageResult, wg *sync.WaitGroup) {
+func (t *Crawler) launchBatchDownloadWorker(batchQ <-chan chan *DownloadInfo, outQ chan<- *data.PageResult, wg *sync.WaitGroup) {
 	for q := range batchQ {
 		// Add for the extra done in worker
 		wg.Add(1)
@@ -84,13 +84,13 @@ func (t *Crawler) launchBatchDownloadWorker(batchQ chan chan *DownloadInfo, outQ
 	wg.Done()
 }
 
-func (t *Crawler) launchDownloadWorker(infoQ chan *DownloadInfo, outQ chan *data.PageResult, wg *sync.WaitGroup) {
+func (t *Crawler) launchDownloadWorker(infoQ <-chan *DownloadInfo, outQ chan<- *data.PageResult, wg *sync.WaitGroup) {
 	log.Println("Worker starting")
 	resolver := DefaultResolver()
 	// Build worker first
 	worker := DownloadWorker{t, nil, resolver, nil}
 	// Create and add client
-	client := getHttpClient(resolver, &worker)
+	client := httpClient(resolver, &worker)
 	worker.client = client
 
 	worker.downloadWorker(infoQ, outQ)
@@ -98,7 +98,7 @@ func (t *Crawler) launchDownloadWorker(infoQ chan *DownloadInfo, outQ chan *data
 	wg.Done()
 }
 
-func toDownloadInfo(inQ chan string, outQ chan *DownloadInfo) {
+func toDownloadInfo(inQ <-chan string, outQ chan<- *DownloadInfo) {
 	for s := range inQ {
 		info := newDownloadInfo(s)
 		outQ <- info
@@ -106,7 +106,7 @@ func toDownloadInfo(inQ chan string, outQ chan *DownloadInfo) {
 	close(outQ)
 }
 
-func toDownloadInfoBatches(inQ chan string, outQ chan chan *DownloadInfo) {
+func toDownloadInfoBatches(inQ <-chan string, outQ chan<- chan *DownloadInfo) {
 	infoQ := make(chan *DownloadInfo, maxBatchItems)
 
 	var currentHost net.IP
@@ -146,7 +146,7 @@ func toDownloadInfoBatches(inQ chan string, outQ chan chan *DownloadInfo) {
 	close(outQ)
 }
 
-func (t *DownloadWorker) downloadWorker(inQ chan *DownloadInfo, outQ chan *data.PageResult) {
+func (t *DownloadWorker) downloadWorker(inQ <-chan *DownloadInfo, outQ chan<- *data.PageResult) {
 	for info := range inQ {
 		// Set info for dialer
 		t.currentInfo = info
@@ -163,6 +163,11 @@ func (t *DownloadWorker) downloadWorker(inQ chan *DownloadInfo, outQ chan *data.
 
 func (t *DownloadWorker) downloadUrl(url string) (page *data.PageResult) {
 	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Print("Error creating request: ", url)
+		log.Printf("%s\n", err)
+		return data.NewFailedResult(url, err.Error())
+	}
 	req.Header.Add("Accept-Encoding", "identity")
 
 	resp, err := t.client.Do(req)
@@ -217,7 +222,7 @@ func (t *DownloadWorker) dial(network, address string) (net.Conn, error) {
 	return net.Dial(network, resolvedStr)
 }
 
-func getHttpClient(resolver *dns_resolver.DnsResolver, worker *DownloadWorker) (client *http.Client) {
+func httpClient(resolver *dns_resolver.DnsResolver, worker *DownloadWorker) (client *http.Client) {
 	trans := &http.Transport{
 		Dial: func(network, address string) (net.Conn, error) {
 			return worker.dial(network, address)

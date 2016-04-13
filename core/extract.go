@@ -14,7 +14,7 @@ import (
 	"github.com/jbrady42/crawl/util"
 )
 
-func ExtractMain(inQ chan string, outQ chan *data.PageResult) {
+func ExtractMain(inQ <-chan string, outQ chan<- *data.PageResult) {
 	for s := range inQ {
 		// Parse page data
 		page := data.PageDataFromLine(s)

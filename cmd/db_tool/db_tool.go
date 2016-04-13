@@ -197,7 +197,7 @@ func importLink(link string, cache *lru.Cache) {
 	}
 }
 
-func getNextUrlList(limit int) {
+func nextUrlList(limit int) {
 	var res []Site
 	db.Limit(limit).Order("random()").Where(map[string]interface{}{"visited": false}).Find(&res)
 	// db.Find(&res)
@@ -249,7 +249,7 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) {
-				getNextUrlList(url_count)
+				nextUrlList(url_count)
 			},
 		},
 		{

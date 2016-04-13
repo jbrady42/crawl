@@ -34,7 +34,7 @@ func NewResolver(servers []string) (resolver *dns_resolver.DnsResolver) {
 	return resolver
 }
 
-func (t *Crawler) Resolve(inQ chan string, outQ chan *data.ResolveResult) {
+func (t *Crawler) Resolve(inQ <-chan string, outQ chan<- *data.ResolveResult) {
 	var wg sync.WaitGroup
 	wg.Add(t.WorkerCount)
 	for i := 0; i < t.WorkerCount; i++ {
@@ -45,7 +45,7 @@ func (t *Crawler) Resolve(inQ chan string, outQ chan *data.ResolveResult) {
 	wg.Wait()
 }
 
-func (t *Crawler) launchResolveWorker(inQ chan string, outQ chan *data.ResolveResult, wg *sync.WaitGroup) {
+func (t *Crawler) launchResolveWorker(inQ <-chan string, outQ chan<- *data.ResolveResult, wg *sync.WaitGroup) {
 	resolver := NewResolver(t.ResolveServers)
 	worker := ResolveWorker{resolver, t}
 
@@ -53,7 +53,7 @@ func (t *Crawler) launchResolveWorker(inQ chan string, outQ chan *data.ResolveRe
 	wg.Done()
 }
 
-func (t *ResolveWorker) resolveWorker(inQ chan string, outQ chan *data.ResolveResult) {
+func (t *ResolveWorker) resolveWorker(inQ <-chan string, outQ chan<- *data.ResolveResult) {
 	for urlStr := range inQ {
 		url := util.ParseUrl(urlStr)
 		host := url.Host

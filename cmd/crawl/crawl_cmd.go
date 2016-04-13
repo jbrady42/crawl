@@ -15,7 +15,6 @@ import (
 func downloadMain() {
 	inQ := util.NewStdinReader()
 	outQ := make(chan *data.PageResult, workers)
-	// opts := crawl.CrawlOpts{workers, 1.0}
 
 	// Setup crawler
 	crawl := core.NewCrawler(workers, groupHost)
