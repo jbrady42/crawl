@@ -25,9 +25,8 @@ func NewStdinReader() chan string {
 
 		for err == nil {
 			// line := scan.Text()
-			line = strings.Trim(line, "\n \t")
+			line = strings.Trim(line, "\r\n \t")
 
-			// fmt.Println(len(line))
 			if len(line) > 0 {
 				out <- line
 			}
