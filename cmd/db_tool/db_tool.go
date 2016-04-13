@@ -38,7 +38,7 @@ func connectDB() *gorm.DB {
 	dbUrl := os.Getenv("DATABASE_URL")
 	conStr, _ := pq.ParseURL(dbUrl)
 	conStr += fmt.Sprintf(" sslmode=%v", "disable") //require
-	// log.Println(conStr)
+
 	db, err := gorm.Open("postgres", conStr)
 	if err != nil {
 		log.Fatal("Can't connect to db")
@@ -77,8 +77,6 @@ func importMain(fun func(string)) {
 
 	for line := range inQ {
 		fun(line)
-		// importLink(line)
-		// importPage(line)
 	}
 }
 
@@ -122,8 +120,6 @@ func importResolve(line string) {
 	site.Message = page.Message
 	db.Save(&site)
 
-	// log.Println(site)
-
 	log.Println("Added ip for:", url)
 }
 
@@ -148,7 +144,6 @@ func importQueued() {
 		}
 		item := strings.Join(parts[1:], "\t")
 		buff = append(buff, item)
-		// fmt.Println(item)
 
 		if len(ids) > batchSize {
 			log.Println("Saving batch", count)
@@ -200,15 +195,9 @@ func importLink(link string, cache *lru.Cache) {
 	} else {
 		log.Println("Existing cached:", link)
 	}
-
-	// db.Save(&site)
-
 }
 
 func getNextUrlList(limit int) {
-	// db = connectDB()
-	// setupDB(db)
-
 	var res []Site
 	db.Limit(limit).Order("random()").Where(map[string]interface{}{"visited": false}).Find(&res)
 	// db.Find(&res)

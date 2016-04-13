@@ -73,7 +73,8 @@ func ExtractLinks(page *data.PageData) (res []*url.URL) {
 
 			// Transform urls
 			// newU = opts.Extender.TransformUrl(newU)
-			newU = transformUrl(newU)
+			// newU = transformUrl(newU)
+
 			res = append(res, newU)
 		}
 	}

@@ -117,7 +117,6 @@ func toDownloadInfoBatches(inQ chan string, outQ chan chan *DownloadInfo) {
 		info := newDownloadInfo(s)
 
 		currentHost = info.IP
-		// log.Println(currentHost, lastHost)
 
 		if first {
 			first = false
@@ -149,7 +148,7 @@ func toDownloadInfoBatches(inQ chan string, outQ chan chan *DownloadInfo) {
 
 func (t *DownloadWorker) downloadWorker(inQ chan *DownloadInfo, outQ chan *data.PageResult) {
 	for info := range inQ {
-		// Set info for dailer
+		// Set info for dialer
 		t.currentInfo = info
 
 		page := t.downloadUrl(info.Url)
@@ -163,7 +162,6 @@ func (t *DownloadWorker) downloadWorker(inQ chan *DownloadInfo, outQ chan *data.
 }
 
 func (t *DownloadWorker) downloadUrl(url string) (page *data.PageResult) {
-
 	req, err := http.NewRequest("GET", url, nil)
 	req.Header.Add("Accept-Encoding", "identity")
 
@@ -228,11 +226,9 @@ func getHttpClient(resolver *dns_resolver.DnsResolver, worker *DownloadWorker) (
 		DisableKeepAlives:   true,
 	}
 
-	// client := &http.Client{}
 	client = &http.Client{
 		Timeout:   defaultTimeout,
 		Transport: trans,
 	}
-
 	return client
 }

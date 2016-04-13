@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"sort"
 	"strings"
 
 	"golang.org/x/net/publicsuffix"
@@ -103,10 +102,12 @@ func SiteRoot(info *url.URL) *url.URL {
 }
 
 func Conatins(list []string, item string) bool {
-	sort.Strings(list)
-	i := sort.SearchStrings(list, item)
-	cont := i < len(list) && list[i] == item
-	return cont
+	for _, a := range list {
+		if a == item {
+			return true
+		}
+	}
+	return false
 }
 
 func UrlTopHost(urlStr string) string {
