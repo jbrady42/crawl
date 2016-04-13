@@ -15,7 +15,6 @@ import (
 
 type ResolveWorker struct {
 	resolver *dns_resolver.DnsResolver
-	cache    *lru.Cache
 }
 
 func DefaultResolver() (resolver *dns_resolver.DnsResolver) {
@@ -37,31 +36,32 @@ func NewResolver(servers []string) (resolver *dns_resolver.DnsResolver) {
 
 func (t *Crawler) Resolve(inQ chan string, outQ chan *data.ResolveResult) {
 	var wg sync.WaitGroup
+	cache, _ := lru.New(1000000)
+
 	wg.Add(t.WorkerCount)
 	for i := 0; i < t.WorkerCount; i++ {
 		time.Sleep(25 * time.Millisecond)
 
-		go t.launchResolveWorker(inQ, outQ, &wg)
+		go t.launchResolveWorker(inQ, outQ, &wg, cache)
 	}
 	wg.Wait()
 }
 
-func (t *Crawler) launchResolveWorker(inQ chan string, outQ chan *data.ResolveResult, wg *sync.WaitGroup) {
+func (t *Crawler) launchResolveWorker(inQ chan string, outQ chan *data.ResolveResult, wg *sync.WaitGroup, cache *lru.Cache) {
 	resolver := NewResolver(t.ResolveServers)
-	cache, _ := lru.New(100000)
-	worker := ResolveWorker{resolver, cache}
+	worker := ResolveWorker{resolver}
 
-	worker.resolveWorker(inQ, outQ)
+	worker.resolveWorker(inQ, outQ, cache)
 	wg.Done()
 }
 
-func (t *ResolveWorker) resolveWorker(inQ chan string, outQ chan *data.ResolveResult) {
+func (t *ResolveWorker) resolveWorker(inQ chan string, outQ chan *data.ResolveResult, cache *lru.Cache) {
 	for urlStr := range inQ {
 		url := util.ParseUrl(urlStr)
 		lookup := url.Host
 
 		var res *data.ResolveResult
-		if !t.cache.Contains(lookup) {
+		if !cache.Contains(lookup) {
 
 			ip, err := resolv(t.resolver, lookup)
 			if err != nil {
@@ -70,11 +70,11 @@ func (t *ResolveWorker) resolveWorker(inQ chan string, outQ chan *data.ResolveRe
 			} else {
 				res = data.NewResolveResult(urlStr, ip)
 				log.Println("Resolved:", urlStr)
-				t.cache.Add(lookup, ip)
+				cache.Add(lookup, ip)
 			}
 		} else {
 			log.Println("Resolved cached: ", urlStr)
-			ip, _ := t.cache.Get(lookup)
+			ip, _ := cache.Get(lookup)
 			res = data.NewResolveResult(urlStr, ip.(net.IP))
 		}
 

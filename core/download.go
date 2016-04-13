@@ -17,7 +17,7 @@ import (
 
 var defaultTimeout = time.Duration(60 * time.Second)
 var hostCrawlDelay = time.Duration(1 * time.Second)
-var maxBatchItems = 50
+var maxBatchItems = 500
 
 type DownloadWorker struct {
 	crawler     *Crawler
@@ -115,7 +115,9 @@ func toDownloadInfoBatches(inQ chan string, outQ chan chan *DownloadInfo) {
 
 	for s := range inQ {
 		info := newDownloadInfo(s)
+
 		currentHost = info.IP
+		// log.Println(currentHost, lastHost)
 
 		if first {
 			first = false
@@ -137,8 +139,8 @@ func toDownloadInfoBatches(inQ chan string, outQ chan chan *DownloadInfo) {
 	}
 	// Check for any left over
 	if len(infoQ) > 0 {
-		close(infoQ)
 		outQ <- infoQ
+		close(infoQ)
 		log.Println("Adding last batch ")
 	}
 
