@@ -26,48 +26,111 @@ type DownloadWorker struct {
 	currentInfo *DownloadInfo
 }
 
-type DownloadInfo struct {
-	Url string
-	IP  net.IP
-}
-
-func newDownloadInfo(s string) *DownloadInfo {
-	var ip net.IP
-	var urlStr string
-
-	parts := strings.Split(s, "\t")
-	if len(parts) == 2 {
-		ip = net.ParseIP(parts[1])
-		urlStr = parts[0]
-	} else {
-		urlStr = s
-	}
-
-	return &DownloadInfo{Url: urlStr, IP: ip}
-}
-
 func (t *Crawler) Download(inQ <-chan string, outQ chan<- *data.PageResult) {
-	var wg sync.WaitGroup
-
-	var infoQ chan *DownloadInfo
-	var batchQ chan chan *DownloadInfo
-
 	if t.GroupByHost {
-		batchQ = make(chan chan *DownloadInfo)
-		go toDownloadInfoBatches(inQ, batchQ)
+		t.downloadPerHost(inQ, outQ)
 	} else {
-		infoQ = make(chan *DownloadInfo)
-		go toDownloadInfo(inQ, infoQ)
+		t.downloadAll(inQ, outQ)
 	}
+}
+
+func (t *Crawler) downloadAll(inQ <-chan string, outQ chan<- *data.PageResult) {
+
+	var wg sync.WaitGroup
+	infoQ := make(chan *DownloadInfo)
+
+	go toDownloadInfo(inQ, infoQ)
 
 	wg.Add(t.WorkerCount)
 	for i := 0; i < t.WorkerCount; i++ {
 		time.Sleep(25 * time.Millisecond)
-		if t.GroupByHost {
-			go t.launchBatchDownloadWorker(batchQ, outQ, &wg)
-		} else {
-			go t.launchDownloadWorker(infoQ, outQ, &wg)
+
+		go t.launchDownloadWorker(infoQ, outQ, &wg)
+	}
+
+	log.Println("Waiting on workers")
+	wg.Wait()
+	log.Println("Exiting Download")
+}
+
+func (t *Crawler) downloadPerHost(inQ <-chan string, outQ chan<- *data.PageResult) {
+	var wg sync.WaitGroup
+
+	infoQ := make(chan *DownloadInfo)
+
+	qMap := make(map[string]chan *DownloadInfo)
+
+	go toDownloadInfo(inQ, infoQ)
+
+	closeChan := make(chan string, t.WorkerCount)
+
+	// Worker timeout watcher
+	closeMap := make(map[string]struct{})
+	go func() {
+		for {
+			time.Sleep(1 * time.Second)
+			for host, q := range qMap {
+				if _, closed := closeMap[host]; len(q) == 0 && !closed {
+					log.Println("Closing download: ", host)
+					close(q)
+					// Mark as closing
+					closeMap[host] = struct{}{}
+				}
+			}
 		}
+	}()
+
+	for info := range infoQ {
+		log.Println(len(qMap))
+		groupKey := info.IP.String()
+		q, found := qMap[groupKey]
+
+		if !found {
+			log.Println("Number of workers ", len(qMap))
+			if len(qMap) >= t.WorkerCount {
+				log.Println("Waiting for free workers")
+
+				// Wait for worker to finish
+				doneGroup := <-closeChan
+				log.Println("Removing worker ", doneGroup)
+
+				// Clear host from maps
+				delete(qMap, doneGroup)
+				delete(closeMap, doneGroup)
+			}
+
+			log.Println("Adding new worker", groupKey)
+			q = make(chan *DownloadInfo, maxBatchItems)
+			qMap[groupKey] = q
+
+			// Notify of finish when worker exits
+			wg.Add(1)
+			go func(host string) {
+				t.launchDownloadWorker(q, outQ, &wg)
+				closeChan <- host
+			}(groupKey)
+
+			// Other way of doing the timeout with per worker
+			// // Timeout handler for empty q
+			// go func(host string) {
+			// 	q, ok := qMap[groupKey]
+
+			// 	for ok {
+			// 		log.Println("Watcher", len(q))
+			// 		time.Sleep(1 * time.Second)
+			// 		q, ok = qMap[groupKey]
+
+			// 		if len(q) == 0 {
+			// 			log.Println("Closing download: ", host)
+			// 			close(q)
+			// 			return
+			// 		}
+			// 	}
+
+			// }(groupKey)
+		}
+
+		q <- info
 	}
 
 	log.Println("Waiting on workers")
@@ -93,60 +156,12 @@ func (t *Crawler) launchDownloadWorker(infoQ <-chan *DownloadInfo, outQ chan<- *
 	client := httpClient(resolver, &worker)
 	worker.client = client
 
-	worker.downloadWorker(infoQ, outQ)
+	worker.downloadUrls(infoQ, outQ)
 	log.Println("Worker finished")
 	wg.Done()
 }
 
-func toDownloadInfo(inQ <-chan string, outQ chan<- *DownloadInfo) {
-	for s := range inQ {
-		info := newDownloadInfo(s)
-		outQ <- info
-	}
-	close(outQ)
-}
-
-func toDownloadInfoBatches(inQ <-chan string, outQ chan<- chan *DownloadInfo) {
-	infoQ := make(chan *DownloadInfo, maxBatchItems)
-
-	var currentHost net.IP
-	var lastHost net.IP
-	first := true
-
-	for s := range inQ {
-		info := newDownloadInfo(s)
-
-		currentHost = info.IP
-
-		if first {
-			first = false
-		}
-		if lastHost != nil && bytes.Compare(currentHost, lastHost) != 0 {
-			// Finish and enqueue batch
-
-			outQ <- infoQ
-			close(infoQ)
-			// Start new batch
-			log.Println("Adding batch ", lastHost)
-			first = true
-			infoQ = make(chan *DownloadInfo, maxBatchItems)
-		}
-
-		infoQ <- info
-		lastHost = currentHost
-
-	}
-	// Check for any left over
-	if len(infoQ) > 0 {
-		outQ <- infoQ
-		close(infoQ)
-		log.Println("Adding last batch ")
-	}
-
-	close(outQ)
-}
-
-func (t *DownloadWorker) downloadWorker(inQ <-chan *DownloadInfo, outQ chan<- *data.PageResult) {
+func (t *DownloadWorker) downloadUrls(inQ <-chan *DownloadInfo, outQ chan<- *data.PageResult) {
 	for info := range inQ {
 		// Set info for dialer
 		t.currentInfo = info
@@ -236,4 +251,54 @@ func httpClient(resolver *dns_resolver.DnsResolver, worker *DownloadWorker) (cli
 		Transport: trans,
 	}
 	return client
+}
+
+// Input handling
+
+func toDownloadInfo(inQ <-chan string, outQ chan<- *DownloadInfo) {
+	for s := range inQ {
+		info := newDownloadInfo(s)
+		outQ <- info
+	}
+	close(outQ)
+}
+
+func toDownloadInfoBatches(inQ <-chan string, outQ chan<- chan *DownloadInfo) {
+	infoQ := make(chan *DownloadInfo, maxBatchItems)
+
+	var currentHost net.IP
+	var lastHost net.IP
+	first := true
+
+	for s := range inQ {
+		info := newDownloadInfo(s)
+
+		currentHost = info.IP
+
+		if first {
+			first = false
+		}
+		if lastHost != nil && bytes.Compare(currentHost, lastHost) != 0 {
+			// Finish and enqueue batch
+
+			outQ <- infoQ
+			close(infoQ)
+			// Start new batch
+			log.Println("Adding batch ", lastHost)
+			first = true
+			infoQ = make(chan *DownloadInfo, maxBatchItems)
+		}
+
+		infoQ <- info
+		lastHost = currentHost
+
+	}
+	// Check for any left over
+	if len(infoQ) > 0 {
+		outQ <- infoQ
+		close(infoQ)
+		log.Println("Adding last batch ")
+	}
+
+	close(outQ)
 }
