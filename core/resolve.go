@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"github.com/bogdanovich/dns_resolver"
-	"github.com/hashicorp/golang-lru"
 	"github.com/jbrady42/crawl/data"
 	"github.com/jbrady42/crawl/util"
 )
 
 type ResolveWorker struct {
 	resolver *dns_resolver.DnsResolver
+	crawl    *Crawler
 }
 
 func DefaultResolver() (resolver *dns_resolver.DnsResolver) {
@@ -36,53 +36,62 @@ func NewResolver(servers []string) (resolver *dns_resolver.DnsResolver) {
 
 func (t *Crawler) Resolve(inQ chan string, outQ chan *data.ResolveResult) {
 	var wg sync.WaitGroup
-	cache, _ := lru.New(1000000)
-
 	wg.Add(t.WorkerCount)
 	for i := 0; i < t.WorkerCount; i++ {
 		time.Sleep(25 * time.Millisecond)
 
-		go t.launchResolveWorker(inQ, outQ, &wg, cache)
+		go t.launchResolveWorker(inQ, outQ, &wg)
 	}
 	wg.Wait()
 }
 
-func (t *Crawler) launchResolveWorker(inQ chan string, outQ chan *data.ResolveResult, wg *sync.WaitGroup, cache *lru.Cache) {
+func (t *Crawler) launchResolveWorker(inQ chan string, outQ chan *data.ResolveResult, wg *sync.WaitGroup) {
 	resolver := NewResolver(t.ResolveServers)
-	worker := ResolveWorker{resolver}
+	worker := ResolveWorker{resolver, t}
 
-	worker.resolveWorker(inQ, outQ, cache)
+	worker.resolveWorker(inQ, outQ)
 	wg.Done()
 }
 
-func (t *ResolveWorker) resolveWorker(inQ chan string, outQ chan *data.ResolveResult, cache *lru.Cache) {
+func (t *ResolveWorker) resolveWorker(inQ chan string, outQ chan *data.ResolveResult) {
 	for urlStr := range inQ {
 		url := util.ParseUrl(urlStr)
-		lookup := url.Host
+		host := url.Host
 
 		var res *data.ResolveResult
-		if !cache.Contains(lookup) {
 
-			ip, err := resolv(t.resolver, lookup)
-			if err != nil {
-				res = data.NewErrorResolveResult(urlStr, err)
-				log.Println(err.Error(), urlStr)
-			} else {
-				res = data.NewResolveResult(urlStr, ip)
-				log.Println("Resolved:", urlStr)
-				cache.Add(lookup, ip)
-			}
+		resolved, err := t.crawl.resolve(t.resolver, host)
+		if err != nil {
+			res = data.NewErrorResolveResult(urlStr, err)
+			log.Println(err.Error(), urlStr)
 		} else {
-			log.Println("Resolved cached: ", urlStr)
-			ip, _ := cache.Get(lookup)
-			res = data.NewResolveResult(urlStr, ip.(net.IP))
+			res = data.NewResolveResult(urlStr, resolved)
+			log.Println("Resolved:", urlStr)
 		}
-
 		outQ <- res
 	}
 }
 
-func resolv(resolver *dns_resolver.DnsResolver, host string) (resolved net.IP, err error) {
+// Resolve with the crawlers cache
+func (t *Crawler) resolve(resolver *dns_resolver.DnsResolver, host string) (resolved net.IP, err error) {
+	// Hit cache first
+	ip, found := t.resolveCache.Get(host)
+	if !found {
+		newIP, err := resolve(resolver, host)
+		if err != nil {
+			return nil, err
+		} else {
+			resolved = newIP
+			t.resolveCache.Add(host, newIP)
+		}
+	} else {
+		// log.Println("Resolve cached: ", host)
+		resolved = ip.(net.IP)
+	}
+	return resolved, nil
+}
+
+func resolve(resolver *dns_resolver.DnsResolver, host string) (resolved net.IP, err error) {
 	ip, err := resolver.LookupHost(host)
 	if err != nil {
 		return nil, err
