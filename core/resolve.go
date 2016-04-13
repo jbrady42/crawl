@@ -8,12 +8,14 @@ import (
 	"time"
 
 	"github.com/bogdanovich/dns_resolver"
+	"github.com/hashicorp/golang-lru"
 	"github.com/jbrady42/crawl/data"
 	"github.com/jbrady42/crawl/util"
 )
 
 type ResolveWorker struct {
 	resolver *dns_resolver.DnsResolver
+	cache    *lru.Cache
 }
 
 func DefaultResolver() (resolver *dns_resolver.DnsResolver) {
@@ -38,29 +40,42 @@ func (t *Crawler) Resolve(inQ chan string, outQ chan *data.ResolveResult) {
 	wg.Add(t.WorkerCount)
 	for i := 0; i < t.WorkerCount; i++ {
 		time.Sleep(25 * time.Millisecond)
-		go func() {
-			resolver := NewResolver(t.ResolveServers)
-			worker := ResolveWorker{resolver}
 
-			worker.resolveWorker(inQ, outQ)
-			wg.Done()
-		}()
+		go t.launchResolveWorker(inQ, outQ, &wg)
 	}
 	wg.Wait()
+}
+
+func (t *Crawler) launchResolveWorker(inQ chan string, outQ chan *data.ResolveResult, wg *sync.WaitGroup) {
+	resolver := NewResolver(t.ResolveServers)
+	cache, _ := lru.New(100000)
+	worker := ResolveWorker{resolver, cache}
+
+	worker.resolveWorker(inQ, outQ)
+	wg.Done()
 }
 
 func (t *ResolveWorker) resolveWorker(inQ chan string, outQ chan *data.ResolveResult) {
 	for urlStr := range inQ {
 		url := util.ParseUrl(urlStr)
+		lookup := url.Host
 
 		var res *data.ResolveResult
-		ip, err := resolv(t.resolver, url.Host)
-		if err != nil {
-			res = data.NewErrorResolveResult(urlStr, err)
-			log.Println(err.Error(), urlStr)
+		if !t.cache.Contains(lookup) {
+
+			ip, err := resolv(t.resolver, lookup)
+			if err != nil {
+				res = data.NewErrorResolveResult(urlStr, err)
+				log.Println(err.Error(), urlStr)
+			} else {
+				res = data.NewResolveResult(urlStr, ip)
+				log.Println("Resolved:", urlStr)
+				t.cache.Add(lookup, ip)
+			}
 		} else {
-			res = data.NewResolveResult(urlStr, ip)
-			log.Println("Resolved:", urlStr)
+			log.Println("Resolved cached: ", urlStr)
+			ip, _ := t.cache.Get(lookup)
+			res = data.NewResolveResult(urlStr, ip.(net.IP))
 		}
 
 		outQ <- res
