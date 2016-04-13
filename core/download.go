@@ -13,11 +13,13 @@ import (
 
 	"github.com/bogdanovich/dns_resolver"
 	"github.com/jbrady42/crawl/data"
+	"github.com/streamrail/concurrent-map"
 )
 
 var defaultTimeout = time.Duration(60 * time.Second)
 var hostCrawlDelay = time.Duration(1 * time.Second)
-var maxBatchItems = 500
+var hostWorkerTimeout = 3 * time.Second
+var maxBatchItems = 100
 
 type DownloadWorker struct {
 	crawler     *Crawler
@@ -55,69 +57,63 @@ func (t *Crawler) downloadAll(inQ <-chan string, outQ chan<- *data.PageResult) {
 
 func (t *Crawler) downloadPerHost(inQ <-chan string, outQ chan<- *data.PageResult) {
 	var wg sync.WaitGroup
-
 	infoQ := make(chan *DownloadInfo)
-
 	qMap := make(map[string]chan *DownloadInfo)
+	closeChan := make(chan string, t.WorkerCount)
 
 	go toDownloadInfo(inQ, infoQ)
 
-	closeChan := make(chan string, t.WorkerCount)
-
-	// Worker timeout watcher
-	closeMap := make(map[string]struct{})
+	// // Worker timeout watcher
+	closeMap := cmap.New()
 	go func() {
 		for {
-			time.Sleep(1 * time.Second)
+			time.Sleep(hostWorkerTimeout)
 			for host, q := range qMap {
-				if _, closed := closeMap[host]; len(q) == 0 && !closed {
+				log.Println("worker: ", host, " length: ", len(q))
+				if _, closed := closeMap.Get(host); len(q) == 0 && !closed {
 					log.Println("Closing download: ", host)
 					close(q)
 					// Mark as closing
-					closeMap[host] = struct{}{}
+					closeMap.Set(host, struct{}{})
 				}
 			}
 		}
 	}()
 
 	for info := range infoQ {
-		log.Println(len(qMap))
 		groupKey := info.IP.String()
 		q, found := qMap[groupKey]
 
 		if !found {
-			log.Println("Number of workers ", len(qMap))
 			if len(qMap) >= t.WorkerCount {
 				log.Println("Waiting for free workers")
-
 				// Wait for worker to finish
-				doneGroup := <-closeChan
-				log.Println("Removing worker ", doneGroup)
-
-				// Clear host from maps
-				delete(qMap, doneGroup)
-				delete(closeMap, doneGroup)
+				<-closeChan
 			}
 
 			log.Println("Adding new worker", groupKey)
 			q = make(chan *DownloadInfo, maxBatchItems)
 			qMap[groupKey] = q
 
-			// Notify of finish when worker exits
 			wg.Add(1)
 			go func(host string) {
 				t.launchDownloadWorker(q, outQ, &wg)
+
+				// Clear host from maps
+				log.Println("Removing worker ", host)
+				delete(qMap, host)
+				closeMap.Remove(host)
+
+				// Notify of finish when worker exits
 				closeChan <- host
 			}(groupKey)
 
-			// Other way of doing the timeout with per worker
+			// // Other way of doing the timeout with per worker
 			// // Timeout handler for empty q
 			// go func(host string) {
-			// 	q, ok := qMap[groupKey]
-
-			// 	for ok {
+			// 	for q, ok := qMap[groupKey]; ok; q, ok = qMap[groupKey] {
 			// 		log.Println("Watcher", len(q))
-			// 		time.Sleep(1 * time.Second)
+			// 		time.Sleep(hostWorkerTimeout)
 			// 		q, ok = qMap[groupKey]
 
 			// 		if len(q) == 0 {
