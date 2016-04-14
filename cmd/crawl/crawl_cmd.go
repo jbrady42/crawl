@@ -19,6 +19,7 @@ func downloadMain() {
 	// Setup crawler
 	crawl := core.NewCrawler(workers, groupHost)
 	crawl.MaxPageBytes = sizeLimit
+	crawl.IgnoreRobots = ignoreRobot
 
 	go func() {
 		crawl.Download(inQ, outQ)
@@ -81,6 +82,7 @@ var workers int
 var sizeLimit int
 var resolverStr string
 var groupHost bool
+var ignoreRobot bool
 
 func main() {
 
@@ -117,6 +119,11 @@ func main() {
 					Name:        "host",
 					Usage:       "Urls are input in groups by host",
 					Destination: &groupHost,
+				},
+				cli.BoolFlag{
+					Name:        "bad-robot",
+					Usage:       "Disable robots.txt checking",
+					Destination: &ignoreRobot,
 				},
 			},
 			Action: func(c *cli.Context) {

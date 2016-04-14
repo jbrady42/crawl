@@ -7,19 +7,24 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/bogdanovich/dns_resolver"
 	"github.com/jbrady42/crawl/data"
+	"github.com/jbrady42/crawl/util"
 	"github.com/streamrail/concurrent-map"
+	"github.com/temoto/robotstxt-go"
 )
 
-var defaultTimeout = time.Duration(60 * time.Second)
-var hostCrawlDelay = time.Duration(1 * time.Second)
-var hostWorkerTimeout = 3 * time.Second
-var maxBatchItems = 1000
+const (
+	defaultTimeout    = time.Duration(60 * time.Second)
+	hostCrawlDelay    = time.Duration(1 * time.Second)
+	hostWorkerTimeout = 3 * time.Second
+	maxBatchItems     = 1000
+)
 
 type DownloadWorker struct {
 	crawler     *Crawler
@@ -83,8 +88,9 @@ func (t *Crawler) downloadPerHost(inQ <-chan string, outQ chan<- *data.PageResul
 			}
 		}
 	}()
-	var q chan *DownloadInfo
+
 	for info := range infoQ {
+		var q chan *DownloadInfo
 		groupKey := info.IP.String()
 
 		// Find worker for host
@@ -169,8 +175,17 @@ func (t *DownloadWorker) downloadUrls(inQ <-chan *DownloadInfo, outQ chan<- *dat
 	for info := range inQ {
 		// Set info for dialer
 		t.currentInfo = info
+		urlStr := info.Url
 
-		page := t.downloadUrl(info.Url)
+		var page *data.PageResult
+
+		if t.crawler.IgnoreRobots || t.allowedByRobots(urlStr) {
+			page = t.downloadUrl(urlStr)
+		} else {
+			log.Println("Blocked by robots")
+			page = data.NewFailedResult(urlStr, "Blocked by robots")
+		}
+
 		outQ <- page
 
 		// Sleep if needed
@@ -305,4 +320,37 @@ func toDownloadInfoBatches(inQ <-chan string, outQ chan<- chan *DownloadInfo) {
 	}
 
 	close(outQ)
+}
+
+func (t *DownloadWorker) robotsTxt(inUrl *url.URL) *robotstxt.RobotsData {
+	roboUrl := util.RobotsUrl(inUrl).String()
+
+	tmp, ok := t.crawler.robotsCache.Get(roboUrl)
+	if !ok {
+		result := t.downloadUrl(roboUrl)
+		text := result.Data.Body
+
+		robots, err := robotstxt.FromString(text)
+		if err != nil {
+			log.Println("Robots error: ", err)
+			return nil
+		}
+		t.crawler.robotsCache.Add(roboUrl, robots)
+		return robots
+	}
+	// log.Println("Cached robots")
+	robots := tmp.(*robotstxt.RobotsData)
+	return robots
+}
+
+func (t *DownloadWorker) allowedByRobots(inUrl string) (allowed bool) {
+	robotsUrl, _ := url.Parse(inUrl)
+	// Fetch robots
+	robots := t.robotsTxt(robotsUrl)
+	if robots == nil {
+		log.Println("No robots")
+		return false
+	}
+	allowed = robots.TestAgent(robotsUrl.Path, t.crawler.UserAgent)
+	return allowed
 }

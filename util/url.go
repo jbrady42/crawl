@@ -67,3 +67,9 @@ func UrlTopHost(urlStr string) string {
 	}
 	return host
 }
+
+func RobotsUrl(inUrl *url.URL) *url.URL {
+	robotUrl := SiteRoot(inUrl)
+	robotUrl.Path = "/robots.txt"
+	return robotUrl
+}
