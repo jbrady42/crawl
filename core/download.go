@@ -71,7 +71,7 @@ func (t *Crawler) downloadPerHost(inQ <-chan string, outQ chan<- *data.PageResul
 	go func() {
 		for {
 			time.Sleep(hostWorkerTimeout)
-			for a := range qMap.Iter() {
+			for a := range qMap.IterBuffered() {
 				host := a.Key
 				q := (a.Val).(chan *DownloadInfo)
 				log.Println("worker: ", host, " length: ", len(q))
@@ -79,7 +79,6 @@ func (t *Crawler) downloadPerHost(inQ <-chan string, outQ chan<- *data.PageResul
 					log.Println("Closing download: ", host)
 					qMap.Remove(host)
 					close(q)
-
 					// Mark as closing
 					closeMap.Set(host, struct{}{})
 				}
