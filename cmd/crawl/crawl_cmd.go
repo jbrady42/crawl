@@ -59,7 +59,7 @@ func extractMain() {
 	outQ := make(chan *data.PageResult)
 
 	go func() {
-		core.ExtractMain(inQ, outQ)
+		core.ExtractMain(inQ, outQ, siteRoot)
 		close(outQ)
 	}()
 
@@ -84,6 +84,7 @@ var sizeLimit int
 var resolverStr string
 var groupHost bool
 var ignoreRobot bool
+var siteRoot bool
 
 func main() {
 
@@ -94,6 +95,13 @@ func main() {
 			Name:    "extract",
 			Aliases: []string{"e"},
 			Usage:   "Extract urls",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:        "root",
+					Usage:       "Only extract site roots",
+					Destination: &siteRoot,
+				},
+			},
 			Action: func(c *cli.Context) {
 				extractMain()
 			},

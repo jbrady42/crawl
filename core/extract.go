@@ -14,7 +14,7 @@ import (
 	"github.com/jbrady42/crawl/util"
 )
 
-func ExtractMain(inQ <-chan string, outQ chan<- *data.PageResult) {
+func ExtractMain(inQ <-chan string, outQ chan<- *data.PageResult, extractRoot bool) {
 	for s := range inQ {
 		// Parse page data
 		page := data.PageDataFromLine(s)
@@ -22,7 +22,7 @@ func ExtractMain(inQ <-chan string, outQ chan<- *data.PageResult) {
 		// 	log.Printf("Error, not extracting. Bad url in line %s\n", line)
 		// 	continue
 		// }
-		links := ExtractLinks(page.Data)
+		links := ExtractLinks(page.Data, extractRoot)
 
 		// Basic filtering
 		links = filterDupLinks(links)
@@ -34,7 +34,7 @@ func ExtractMain(inQ <-chan string, outQ chan<- *data.PageResult) {
 }
 
 // TODO make sure urls are normalized
-func ExtractLinks(page *data.PageData) (res []*url.URL) {
+func ExtractLinks(page *data.PageData, extractRoot bool) (res []*url.URL) {
 	pageReader := strings.NewReader(page.Body)
 	//defer pageReader.Close()
 
@@ -73,7 +73,11 @@ func ExtractLinks(page *data.PageData) (res []*url.URL) {
 
 			// Transform urls
 			// newU = opts.Extender.TransformUrl(newU)
-			// newU = transformUrl(newU)
+
+			// Filter options
+			if extractRoot {
+				newU = transformRoot(newU)
+			}
 
 			res = append(res, newU)
 		}
@@ -82,7 +86,7 @@ func ExtractLinks(page *data.PageData) (res []*url.URL) {
 	return res
 }
 
-func transformUrl(info *url.URL) *url.URL {
+func transformRoot(info *url.URL) *url.URL {
 	return util.SiteRoot(info)
 }
 
