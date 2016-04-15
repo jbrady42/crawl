@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bogdanovich/dns_resolver"
 	"github.com/jbrady42/crawl/data"
 	"github.com/jbrady42/crawl/util"
 	"github.com/streamrail/concurrent-map"
@@ -29,7 +28,6 @@ const (
 type DownloadWorker struct {
 	crawler     *Crawler
 	client      *http.Client
-	resolver    *dns_resolver.DnsResolver
 	currentInfo *DownloadInfo
 }
 
@@ -159,11 +157,10 @@ func (t *Crawler) launchBatchDownloadWorker(batchQ <-chan chan *DownloadInfo, ou
 
 func (t *Crawler) launchDownloadWorker(infoQ <-chan *DownloadInfo, outQ chan<- *data.PageResult, wg *sync.WaitGroup) {
 	log.Println("Worker starting")
-	resolver := DefaultResolver()
 	// Build worker first
-	worker := DownloadWorker{t, nil, resolver, nil}
+	worker := DownloadWorker{t, nil, nil}
 	// Create and add client
-	client := httpClient(resolver, &worker)
+	client := httpClient(&worker)
 	worker.client = client
 
 	worker.downloadUrls(infoQ, outQ)
@@ -238,7 +235,7 @@ func (t *DownloadWorker) dial(network, address string) (net.Conn, error) {
 	var resolvedStr string
 
 	if t.currentInfo.IP == nil {
-		resolved, err := t.crawler.resolve(t.resolver, hostPart)
+		resolved, err := t.crawler.resolver.Resolve(hostPart)
 		if err != nil {
 			return nil, err
 		}
@@ -256,7 +253,7 @@ func (t *DownloadWorker) dial(network, address string) (net.Conn, error) {
 	return net.Dial(network, resolvedStr)
 }
 
-func httpClient(resolver *dns_resolver.DnsResolver, worker *DownloadWorker) (client *http.Client) {
+func httpClient(worker *DownloadWorker) (client *http.Client) {
 	trans := &http.Transport{
 		Dial: func(network, address string) (net.Conn, error) {
 			return worker.dial(network, address)

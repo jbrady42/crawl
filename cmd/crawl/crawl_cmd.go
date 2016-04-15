@@ -17,7 +17,9 @@ func downloadMain() {
 	outQ := make(chan *data.PageResult, workers)
 
 	// Setup crawler
-	crawl := core.NewCrawler(workers, groupHost)
+	servers := []string{} // Use default servers
+
+	crawl := core.NewCrawler(workers, groupHost, servers)
 	crawl.MaxPageBytes = sizeLimit
 	crawl.IgnoreRobots = ignoreRobot
 
@@ -39,11 +41,10 @@ func resolveMain() {
 	servers := strings.Split(resolverStr, ",")
 	log.Println("Resolvers:", servers)
 	// Setup crawler
-	crawl := core.NewCrawler(workers, false)
-	crawl.ResolveServers = servers
+	crawl := core.NewCrawler(workers, false, servers)
 
 	go func() {
-		crawl.Resolve(inQ, outQ)
+		crawl.ResolveWorker(inQ, outQ)
 		close(outQ)
 	}()
 

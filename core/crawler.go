@@ -2,23 +2,23 @@ package core
 
 import (
 	"github.com/hashicorp/golang-lru"
+	"github.com/jbrady42/crawl/resolve"
 	"github.com/juju/ratelimit"
 )
 
 type Crawler struct {
-	UserAgent      string
-	WorkerCount    int
-	GroupByHost    bool
-	RateLimitMB    float64
-	RateBucket     *ratelimit.Bucket
-	MaxPageBytes   int
-	ResolveServers []string
-	IgnoreRobots   bool
-	resolveCache   *lru.Cache
-	robotsCache    *lru.Cache
+	UserAgent    string
+	WorkerCount  int
+	GroupByHost  bool
+	RateLimitMB  float64
+	RateBucket   *ratelimit.Bucket
+	MaxPageBytes int
+	IgnoreRobots bool
+	resolver     *resolve.Resolver
+	robotsCache  *lru.Cache
 }
 
-func NewCrawler(workers int, groupHost bool) *Crawler {
+func NewCrawler(workers int, groupHost bool, servers []string) *Crawler {
 
 	crawler := &Crawler{
 		UserAgent:    "Smith",
@@ -29,10 +29,10 @@ func NewCrawler(workers int, groupHost bool) *Crawler {
 		MaxPageBytes: -1,
 	}
 
-	cache, _ := lru.New(1000000)
 	robotCache, _ := lru.New(500)
-	crawler.resolveCache = cache
 	crawler.robotsCache = robotCache
+
+	crawler.resolver = resolve.NewWithServers(servers)
 
 	// Setup rate limiting
 	//SetRateLimited(0.0)
