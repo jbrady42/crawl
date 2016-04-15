@@ -9,15 +9,16 @@ import (
 type ResolveResult struct {
 	Url     string
 	IP      net.IP
+	Cname   string
 	Message string
 }
 
 func NewErrorResolveResult(host string, err error) *ResolveResult {
-	return &ResolveResult{host, nil, err.Error()}
+	return &ResolveResult{host, nil, "", err.Error()}
 }
 
-func NewResolveResult(host string, ip net.IP) *ResolveResult {
-	return &ResolveResult{host, ip, ""}
+func NewResolveResult(host string, ip net.IP, cname string) *ResolveResult {
+	return &ResolveResult{host, ip, cname, ""}
 }
 
 func ResolveResultFromLine(line string) *ResolveResult {

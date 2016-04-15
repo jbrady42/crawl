@@ -30,12 +30,12 @@ func (t *Crawler) resolveWorker(inQ <-chan string, outQ chan<- *data.ResolveResu
 
 		var res *data.ResolveResult
 
-		resolved, err := t.resolver.Resolve(host)
+		resolved, cname, err := t.resolver.Resolve(host)
 		if err != nil {
 			res = data.NewErrorResolveResult(urlStr, err)
 			log.Println(err.Error(), urlStr)
 		} else {
-			res = data.NewResolveResult(urlStr, resolved)
+			res = data.NewResolveResult(urlStr, resolved, cname)
 			log.Println("Resolved:", urlStr)
 		}
 		outQ <- res

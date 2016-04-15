@@ -235,7 +235,7 @@ func (t *DownloadWorker) dial(network, address string) (net.Conn, error) {
 	var resolvedStr string
 
 	if t.currentInfo.IP == nil {
-		resolved, err := t.crawler.resolver.Resolve(hostPart)
+		resolved, _, err := t.crawler.resolver.Resolve(hostPart)
 		if err != nil {
 			return nil, err
 		}

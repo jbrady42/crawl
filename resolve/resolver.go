@@ -8,6 +8,12 @@ import (
 	"github.com/hashicorp/golang-lru"
 )
 
+type cacheItem struct {
+	host  string
+	ip    net.IP
+	cname string
+}
+
 type Resolver struct {
 	resolver     *dns_resolver.DnsResolver
 	resolveCache *lru.Cache
@@ -45,22 +51,28 @@ func newResolver(servers []string) (resolver *dns_resolver.DnsResolver) {
 }
 
 // Resolve with the crawlers cache
-func (t *Resolver) Resolve(host string) (resolved net.IP, err error) {
+func (t *Resolver) Resolve(host string) (resolved net.IP, cname string, err error) {
 	// Hit cache first
-	ip, found := t.resolveCache.Get(host)
+	tmp, found := t.resolveCache.Get(host)
 	if !found {
-		newIP, err := resolve(t.resolver, host)
+
+		// Do resolve
+		resolved, cname, err = resolveWithCname(t.resolver, host)
+
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		} else {
-			resolved = newIP
-			t.resolveCache.Add(host, newIP)
+			// resolved = newIP
+			item := cacheItem{host, resolved, cname}
+			t.resolveCache.Add(host, item)
 		}
 	} else {
 		// log.Println("Resolve cached: ", host)
-		resolved = ip.(net.IP)
+		item := tmp.(cacheItem)
+		resolved = item.ip
+		cname = item.cname
 	}
-	return resolved, nil
+	return resolved, cname, nil
 }
 
 func resolve(resolver *dns_resolver.DnsResolver, host string) (resolved net.IP, err error) {
@@ -73,4 +85,23 @@ func resolve(resolver *dns_resolver.DnsResolver, host string) (resolved net.IP, 
 		resolved = ip[0]
 	}
 	return resolved, nil
+}
+
+func resolveWithCname(resolver *dns_resolver.DnsResolver, host string) (resolved net.IP, name string, err error) {
+	ips, nameList, err := resolver.LookupHostFull(host)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// Handle ip
+	if len(ips) == 0 {
+		return nil, "", errors.New("No results")
+	} else {
+		resolved = ips[0]
+	}
+
+	if len(nameList) > 0 {
+		name = nameList[0]
+	}
+	return resolved, name, nil
 }

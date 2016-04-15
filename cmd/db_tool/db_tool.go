@@ -28,6 +28,7 @@ type Site struct {
 	Success  bool
 	Message  string
 	IP       string
+	Cname    string
 }
 
 func newSite(urlS string) Site {
@@ -117,6 +118,7 @@ func importResolve(line string) {
 	var site Site
 	db.Where(newSite(url)).Find(&site)
 	site.IP = page.IP.String()
+	site.Cname = page.Cname
 	site.Message = page.Message
 	db.Save(&site)
 
