@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -58,6 +59,16 @@ func (t *Crawler) downloadAll(inQ <-chan string, outQ chan<- *data.PageResult) {
 	log.Println("Exiting Download")
 }
 
+func writeStats(workerCount, urlCount int) {
+	stats := fmt.Sprintf("%d\t%d", workerCount, urlCount)
+	err := ioutil.WriteFile("/tmp/crawlstats", []byte(stats), 0644)
+
+	if err != nil {
+		log.Println("Can not write stats file")
+		panic(err)
+	}
+}
+
 func (t *Crawler) downloadPerHost(inQ <-chan string, outQ chan<- *data.PageResult) {
 	var wg sync.WaitGroup
 	infoQ := make(chan *DownloadInfo)
@@ -71,18 +82,22 @@ func (t *Crawler) downloadPerHost(inQ <-chan string, outQ chan<- *data.PageResul
 	go func() {
 		for {
 			time.Sleep(hostWorkerTimeout)
+			count := 0
 			for a := range qMap.IterBuffered() {
 				host := a.Key
 				q := (a.Val).(chan *DownloadInfo)
-				log.Println("worker: ", host, " length: ", len(q))
-				if len(q) == 0 {
+				qLen := len(q)
+				log.Println("worker: ", host, " length: ", qLen)
+				count += qLen
+				if qLen == 0 && !closeMap.Has(host) {
 					log.Println("Closing download: ", host)
-					qMap.Remove(host)
+					// qMap.Remove(host)
 					close(q)
 					// Mark as closing
 					closeMap.Set(host, struct{}{})
 				}
 			}
+			writeStats(qMap.Count(), count)
 		}
 	}()
 
@@ -92,7 +107,8 @@ func (t *Crawler) downloadPerHost(inQ <-chan string, outQ chan<- *data.PageResul
 
 		// Find worker for host
 		tmp, found := qMap.Get(groupKey)
-		if found {
+		closing := closeMap.Has(groupKey)
+		if found && !closing {
 			q = tmp.(chan *DownloadInfo)
 		} else {
 			// Create new worker
@@ -113,6 +129,7 @@ func (t *Crawler) downloadPerHost(inQ <-chan string, outQ chan<- *data.PageResul
 
 				// Clear host from maps
 				log.Println("Removing worker ", host)
+				qMap.Remove(host)
 				closeMap.Remove(host)
 
 				// Notify of finish when worker exits
@@ -201,6 +218,9 @@ func (t *DownloadWorker) downloadUrl(url string) (page *data.PageResult) {
 	req.Header.Add("Accept-Encoding", "identity")
 
 	resp, err := t.client.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 	if err != nil {
 		log.Printf("Error downloading %s : %s\n", url, err)
 		return data.NewFailedResult(url, err.Error())
@@ -220,7 +240,7 @@ func (t *DownloadWorker) downloadUrl(url string) (page *data.PageResult) {
 		log.Println("Error reading response body")
 	}
 	// Close con
-	resp.Body.Close()
+	//resp.Body.Close()
 
 	pd := data.NewPageData(url, resp, body)
 	log.Printf("Download complete: %s \n", url)
