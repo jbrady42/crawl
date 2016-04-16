@@ -17,54 +17,66 @@ type cacheItem struct {
 type Resolver struct {
 	resolver     *dns_resolver.DnsResolver
 	resolveCache *lru.Cache
+	servers      []string
+}
+
+type ResolveWorker struct {
+	resolver     *dns_resolver.DnsResolver
+	crawlResolve *Resolver
 }
 
 func New() *Resolver {
-	cache, _ := lru.New(1000000)
-	res := defaultResolver()
-	return &Resolver{res, cache}
+	return NewWithServers([]string{})
 }
 
 func NewWithServers(servers []string) *Resolver {
-	resolver := New()
-	if len(servers) > 0 {
-		resolver.resolver = newResolver(servers)
+	cache, _ := lru.New(1000000)
+	if len(servers) == 0 {
+		servers = []string{"208.67.222.222", "208.67.220.220", "8.8.8.8", "8.8.4.4"}
 	}
-	return resolver
+	worker := newResolver(servers)
+	return &Resolver{worker, cache, servers}
 }
 
-func defaultResolver() (resolver *dns_resolver.DnsResolver) {
-	resolver = dns_resolver.New([]string{"208.67.222.222", "208.67.220.220", "8.8.8.8", "8.8.4.4"})
-	resolver.RetryTimes = 3
-	resolver.ReuseConnection = true
-	return resolver
+func (t *Resolver) NewWorker() *ResolveWorker {
+	res := newResolver(t.servers)
+	return &ResolveWorker{res, t}
 }
 
-func newResolver(servers []string) (resolver *dns_resolver.DnsResolver) {
+func newResolver(servers []string) *dns_resolver.DnsResolver {
 	// Hand a copy because resolver mutates servers
 	tmpServer := make([]string, len(servers))
 	copy(tmpServer, servers)
 
-	resolver = dns_resolver.New(tmpServer)
+	resolver := dns_resolver.New(tmpServer)
 	resolver.ReuseConnection = true
+
 	return resolver
+}
+
+func (t *ResolveWorker) Resolve(host string) (resolved net.IP, cname string, err error) {
+	return resolveWithCache(host, t.resolver, t.crawlResolve.resolveCache)
 }
 
 // Resolve with the crawlers cache
 func (t *Resolver) Resolve(host string) (resolved net.IP, cname string, err error) {
+	return resolveWithCache(host, t.resolver, t.resolveCache)
+}
+
+func resolveWithCache(host string, resolver *dns_resolver.DnsResolver, cache *lru.Cache) (resolved net.IP, cname string, err error) {
 	// Hit cache first
-	tmp, found := t.resolveCache.Get(host)
+	tmp, found := cache.Get(host)
 	if !found {
 
 		// Do resolve
-		resolved, cname, err = resolveWithCname(t.resolver, host)
+		resolved, cname, err = resolveWithCname(resolver, host)
 
 		if err != nil {
 			return nil, "", err
 		} else {
 			// resolved = newIP
 			item := cacheItem{host, resolved, cname}
-			t.resolveCache.Add(host, item)
+			cache.Add(host, item)
 		}
 	} else {
 		// log.Println("Resolve cached: ", host)

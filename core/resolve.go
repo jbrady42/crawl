@@ -24,13 +24,15 @@ func (t *Crawler) ResolveWorker(inQ <-chan string, outQ chan<- *data.ResolveResu
 }
 
 func (t *Crawler) resolveWorker(inQ <-chan string, outQ chan<- *data.ResolveResult) {
+	resolveWorker := t.resolver.NewWorker()
+
 	for urlStr := range inQ {
 		url := util.ParseUrl(urlStr)
 		host := url.Host
 
 		var res *data.ResolveResult
 
-		resolved, cname, err := t.resolver.Resolve(host)
+		resolved, cname, err := resolveWorker.Resolve(host)
 		if err != nil {
 			res = data.NewErrorResolveResult(urlStr, err)
 			log.Println(err.Error(), urlStr)
