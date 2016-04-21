@@ -15,7 +15,7 @@ import (
 
 	"github.com/jbrady42/crawl/data"
 	"github.com/jbrady42/crawl/util"
-	"github.com/streamrail/concurrent-map"
+	"github.com/jbrady42/syncmap"
 	"github.com/temoto/robotstxt-go"
 )
 
@@ -72,32 +72,31 @@ func writeStats(workerCount, urlCount int) {
 func (t *Crawler) downloadPerHost(inQ <-chan string, outQ chan<- *data.PageResult) {
 	var wg sync.WaitGroup
 	infoQ := make(chan *DownloadInfo)
-	qMap := cmap.New()
+	qMap := syncmap.New()
 	closeChan := make(chan string, t.WorkerCount)
 
 	go toDownloadInfo(inQ, infoQ)
 
 	// // Worker timeout watcher
-	closeMap := cmap.New()
+	closeMap := syncmap.New()
 	go func() {
 		for {
 			time.Sleep(hostWorkerTimeout)
 			count := 0
-			for a := range qMap.IterBuffered() {
-				host := a.Key
+			for a := range qMap.Iter() {
+				host := a.Key.(string)
 				q := (a.Val).(chan *DownloadInfo)
 				qLen := len(q)
 				log.Println("worker: ", host, " length: ", qLen)
 				count += qLen
 				if qLen == 0 && !closeMap.Has(host) {
 					log.Println("Closing download: ", host)
-					// qMap.Remove(host)
 					close(q)
 					// Mark as closing
 					closeMap.Set(host, struct{}{})
 				}
 			}
-			writeStats(qMap.Count(), count)
+			writeStats(qMap.Len(), count)
 		}
 	}()
 
@@ -112,7 +111,7 @@ func (t *Crawler) downloadPerHost(inQ <-chan string, outQ chan<- *data.PageResul
 			q = tmp.(chan *DownloadInfo)
 		} else {
 			// Create new worker
-			if qMap.Count() >= t.WorkerCount {
+			if qMap.Len() >= t.WorkerCount {
 				log.Println("Waiting for free workers")
 				// Wait for worker to finish
 				<-closeChan
@@ -129,8 +128,8 @@ func (t *Crawler) downloadPerHost(inQ <-chan string, outQ chan<- *data.PageResul
 
 				// Clear host from maps
 				log.Println("Removing worker ", host)
-				qMap.Remove(host)
-				closeMap.Remove(host)
+				qMap.Delete(host)
+				closeMap.Delete(host)
 
 				// Notify of finish when worker exits
 				closeChan <- host
