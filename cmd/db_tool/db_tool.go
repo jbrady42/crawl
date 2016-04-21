@@ -136,15 +136,15 @@ func importQueued() {
 	var buff []string
 
 	for line := range inQ {
-
-		parts := strings.Split(line, "\t")
+		newLine := strings.Trim(line, "\n\r\t")
+		parts := strings.Split(newLine, "\t")
 		id, _ := strconv.Atoi(parts[0])
 		ids = append(ids, id)
 
 		if len(parts) < 3 {
 			log.Println(parts)
 		}
-		item := strings.Join(parts[1:], "\t")
+		item := strings.Join(parts[1:3], "\t")
 		buff = append(buff, item)
 
 		if len(ids) > batchSize {

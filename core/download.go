@@ -111,7 +111,7 @@ func (t *Crawler) downloadPerHost(inQ <-chan string, outQ chan<- *data.PageResul
 			q = tmp.(chan *DownloadInfo)
 		} else {
 			// Create new worker
-			if qMap.Len() >= t.WorkerCount {
+			for qMap.Len() >= t.WorkerCount {
 				log.Println("Waiting for free workers")
 				// Wait for worker to finish
 				<-closeChan
@@ -123,7 +123,7 @@ func (t *Crawler) downloadPerHost(inQ <-chan string, outQ chan<- *data.PageResul
 
 			wg.Add(1)
 			go func(host string, inQ chan *DownloadInfo) {
-				time.Sleep(25 * time.Millisecond)
+				time.Sleep(100 * time.Millisecond)
 				t.launchDownloadWorker(inQ, outQ, &wg)
 
 				// Clear host from maps
@@ -172,6 +172,7 @@ func (t *Crawler) launchBatchDownloadWorker(batchQ <-chan chan *DownloadInfo, ou
 
 func (t *Crawler) launchDownloadWorker(infoQ <-chan *DownloadInfo, outQ chan<- *data.PageResult, wg *sync.WaitGroup) {
 	log.Println("Worker starting")
+	defer wg.Done()
 	// Build worker first
 	worker := DownloadWorker{t, nil, nil}
 	// Create and add client
@@ -180,7 +181,6 @@ func (t *Crawler) launchDownloadWorker(infoQ <-chan *DownloadInfo, outQ chan<- *
 
 	worker.downloadUrls(infoQ, outQ)
 	log.Println("Worker finished")
-	wg.Done()
 }
 
 func (t *DownloadWorker) downloadUrls(inQ <-chan *DownloadInfo, outQ chan<- *data.PageResult) {
