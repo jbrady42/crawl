@@ -16,10 +16,11 @@ func (t *Crawler) ResolveWorker(inQ <-chan string, outQ chan<- *data.ResolveResu
 		time.Sleep(25 * time.Millisecond)
 
 		go func() {
+			defer wg.Done()
 			t.resolveWorker(inQ, outQ)
-			wg.Done()
 		}()
 	}
+	log.Println("Waiting on workers")
 	wg.Wait()
 }
 

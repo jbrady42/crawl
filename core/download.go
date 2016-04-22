@@ -65,7 +65,6 @@ func writeStats(workerCount, urlCount int) {
 
 	if err != nil {
 		log.Println("Can not write stats file")
-		panic(err)
 	}
 }
 

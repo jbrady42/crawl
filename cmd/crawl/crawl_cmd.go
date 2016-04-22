@@ -165,5 +165,5 @@ func main() {
 	}
 
 	app.Run(os.Args)
-	// printMain()
+	log.Println("Exiting crawl")
 }

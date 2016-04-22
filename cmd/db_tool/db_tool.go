@@ -275,4 +275,5 @@ func main() {
 	}
 
 	app.Run(os.Args)
+	log.Println("Exiting db_tool")
 }
