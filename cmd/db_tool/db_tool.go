@@ -74,7 +74,7 @@ func seedDB(db *gorm.DB) {
 }
 
 func importMain(fun func(string)) {
-	inQ := util.NewStdinReader()
+	inQ := util.NewStdinReader(0)
 
 	for line := range inQ {
 		fun(line)
@@ -84,7 +84,7 @@ func importMain(fun func(string)) {
 func importLinksMain() {
 	cache, _ := lru.New(1000000)
 
-	inQ := util.NewStdinReader()
+	inQ := util.NewStdinReader(0)
 
 	for line := range inQ {
 		importLink(line, cache)
@@ -126,7 +126,7 @@ func importResolve(line string) {
 }
 
 func importQueued() {
-	inQ := util.NewStdinReader()
+	inQ := util.NewStdinReader(0)
 
 	// PG max params 65535
 	batchSize := 1000
