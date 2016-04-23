@@ -22,7 +22,8 @@ import (
 const (
 	defaultTimeout    = time.Duration(60 * time.Second)
 	hostCrawlDelay    = time.Duration(1 * time.Second)
-	hostWorkerTimeout = 3 * time.Second
+	hostWorkerTimeout = 1 * time.Second
+	statsInterval     = 3 * time.Second
 	maxBatchItems     = 1000
 )
 
@@ -30,6 +31,13 @@ type DownloadWorker struct {
 	crawler     *Crawler
 	client      *http.Client
 	currentInfo *DownloadInfo
+}
+
+type HostWorker struct {
+	inQ     chan *DownloadInfo
+	outQ    chan<- *data.PageResult
+	key     string
+	closing bool
 }
 
 func (t *Crawler) Download(inQ <-chan string, outQ chan<- *data.PageResult) {
@@ -59,98 +67,85 @@ func (t *Crawler) downloadAll(inQ <-chan string, outQ chan<- *data.PageResult) {
 	log.Println("Exiting Download")
 }
 
-func writeStats(workerCount, urlCount int) {
-	stats := fmt.Sprintf("%d\t%d", workerCount, urlCount)
-	err := ioutil.WriteFile("/tmp/crawlstats", []byte(stats), 0644)
+func writeStats(workerCount, closingCount, urlCount int) {
+	stats := fmt.Sprintf("%d\t%d\t%d", workerCount, closingCount, urlCount)
+	err := ioutil.WriteFile("/tmp/crawl_stats", []byte(stats), 0644)
 
 	if err != nil {
 		log.Println("Can not write stats file")
 	}
 }
 
+func crwalStatsWorker(hostMap *syncmap.Map) {
+	for {
+		time.Sleep(statsInterval)
+		var count, closeCount int
+		for tmp := range hostMap.Iter() {
+			worker := tmp.Val.(*HostWorker)
+			count += len(worker.inQ)
+			if worker.closing {
+				log.Println("worker:", worker.key, "close waiting")
+				closeCount++
+			}
+		}
+		writeStats(hostMap.Len(), closeCount, count)
+	}
+}
+
+func workerCloseWatcher(worker *HostWorker) {
+	for {
+		time.Sleep(hostWorkerTimeout)
+		qLen := len(worker.inQ)
+		log.Println("worker: ", worker.key, "length:", qLen)
+		if qLen == 0 {
+			log.Println("Closing download:", worker.key)
+			close(worker.inQ)
+			worker.closing = true
+			return
+		}
+	}
+}
+
 func (t *Crawler) downloadPerHost(inQ <-chan string, outQ chan<- *data.PageResult) {
 	var wg sync.WaitGroup
 	infoQ := make(chan *DownloadInfo)
-	qMap := syncmap.New()
 	closeChan := make(chan string, t.WorkerCount)
+	workerMap := syncmap.New()
 
+	// Transform input
 	go toDownloadInfo(inQ, infoQ)
-
-	// // Worker timeout watcher
-	closeMap := syncmap.New()
-	go func() {
-		for {
-			time.Sleep(hostWorkerTimeout)
-			count := 0
-			for a := range qMap.Iter() {
-				host := a.Key.(string)
-				q := (a.Val).(chan *DownloadInfo)
-				qLen := len(q)
-				log.Println("worker: ", host, " length: ", qLen)
-				count += qLen
-				if qLen == 0 && !closeMap.Has(host) {
-					log.Println("Closing download: ", host)
-					close(q)
-					// Mark as closing
-					closeMap.Set(host, struct{}{})
-				}
-			}
-			writeStats(qMap.Len(), count)
-		}
-	}()
-
+	//Launch worker stats
+	go crwalStatsWorker(workerMap)
+	// Find or create worker
 	for info := range infoQ {
 		var q chan *DownloadInfo
-		groupKey := info.IP.String()
+		hostKey := info.IP.String()
 
 		// Find worker for host
-		tmp, found := qMap.Get(groupKey)
-		closing := closeMap.Has(groupKey)
-		if found && !closing {
-			q = tmp.(chan *DownloadInfo)
+		tmp, found := workerMap.Get(hostKey)
+		if found && !tmp.(*HostWorker).closing {
+			q = tmp.(*HostWorker).inQ
 		} else {
 			// Create new worker
-			for qMap.Len() >= t.WorkerCount {
+			for workerMap.Len() >= t.WorkerCount {
 				log.Println("Waiting for free workers")
 				// Wait for worker to finish
 				<-closeChan
 			}
 
-			log.Println("Adding new worker", groupKey)
+			log.Println("Adding new worker", hostKey)
 			q = make(chan *DownloadInfo, maxBatchItems)
-			qMap.Set(groupKey, q)
+
+			worker := &HostWorker{inQ: q, outQ: outQ, key: hostKey}
+			workerMap.Set(hostKey, worker)
 
 			wg.Add(1)
-			go func(host string, inQ chan *DownloadInfo) {
-				time.Sleep(100 * time.Millisecond)
-				t.launchDownloadWorker(inQ, outQ, &wg)
+			go t.launchHostDownloadWorker(&wg, worker, workerMap, closeChan)
 
-				// Clear host from maps
-				log.Println("Removing worker ", host)
-				qMap.Delete(host)
-				closeMap.Delete(host)
-
-				// Notify of finish when worker exits
-				closeChan <- host
-			}(groupKey, q)
-
-			// // Other way of doing the timeout with per worker
-			// // Timeout handler for empty q
-			// go func(host string) {
-			// 	for q, ok := qMap[groupKey]; ok; q, ok = qMap[groupKey] {
-			// 		log.Println("Watcher", len(q))
-			// 		time.Sleep(hostWorkerTimeout)
-			// 		q, ok = qMap[groupKey]
-
-			// 		if len(q) == 0 {
-			// 			log.Println("Closing download: ", host)
-			// 			close(q)
-			// 			return
-			// 		}
-			// 	}
-
-			// }(groupKey)
+			// Worker empty timeout
+			go workerCloseWatcher(worker)
 		}
+
 		// Add into to correct host queue
 		q <- info
 	}
@@ -158,6 +153,17 @@ func (t *Crawler) downloadPerHost(inQ <-chan string, outQ chan<- *data.PageResul
 	log.Println("Waiting on workers")
 	wg.Wait()
 	log.Println("Exiting Download")
+}
+
+func (t *Crawler) launchHostDownloadWorker(wg *sync.WaitGroup, worker *HostWorker, workerMap *syncmap.Map, closeChan chan string) {
+	time.Sleep(100 * time.Millisecond)
+	t.launchDownloadWorker(worker.inQ, worker.outQ, wg)
+
+	// Clear host from maps
+	workerMap.Delete(worker.key)
+	log.Println("Removing worker", worker.key)
+	// Notify of finish when worker exits
+	closeChan <- worker.key
 }
 
 func (t *Crawler) launchBatchDownloadWorker(batchQ <-chan chan *DownloadInfo, outQ chan<- *data.PageResult, wg *sync.WaitGroup) {
