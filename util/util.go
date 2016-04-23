@@ -9,8 +9,8 @@ import (
 	"strings"
 )
 
-func NewStdinReader() chan string {
-	out := make(chan string)
+func NewStdinReader(buffer int) chan string {
+	out := make(chan string, buffer)
 	// scan := bufio.NewScanner(os.Stdin)
 	reader := bufio.NewReader(os.Stdin)
 	go func() {

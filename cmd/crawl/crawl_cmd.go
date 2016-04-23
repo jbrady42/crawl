@@ -13,7 +13,7 @@ import (
 )
 
 func downloadMain() {
-	inQ := util.NewStdinReader()
+	inQ := util.NewStdinReader(workers)
 	outQ := make(chan *data.PageResult, workers)
 
 	// Setup crawler
@@ -35,10 +35,15 @@ func downloadMain() {
 }
 
 func resolveMain() {
-	inQ := util.NewStdinReader()
+	inQ := util.NewStdinReader(0)
 	outQ := make(chan *data.ResolveResult, workers)
 
-	servers := strings.Split(resolverStr, ",")
+	var servers []string
+	if resolverStr != "" {
+		servers = strings.Split(resolverStr, ",")
+	} else {
+		servers = []string{"208.67.222.222", "208.67.220.220", "8.8.8.8", "8.8.4.4"}
+	}
 	log.Println("Resolvers:", servers)
 	// Setup crawler
 	crawl := core.NewCrawler(workers, false, servers)
@@ -55,7 +60,7 @@ func resolveMain() {
 }
 
 func extractMain() {
-	inQ := util.NewStdinReader()
+	inQ := util.NewStdinReader(0)
 	outQ := make(chan *data.PageResult)
 
 	go func() {
@@ -73,7 +78,7 @@ func extractMain() {
 }
 
 func printMain() {
-	inQ := util.NewStdinReader()
+	inQ := util.NewStdinReader(0)
 	for a := range inQ {
 		fmt.Println(a)
 	}
@@ -153,7 +158,7 @@ func main() {
 				},
 				cli.StringFlag{
 					Name:        "servers",
-					Value:       "8.8.8.8",
+					Value:       "",
 					Usage:       "Comma separated list of resolve servers",
 					Destination: &resolverStr,
 				},
