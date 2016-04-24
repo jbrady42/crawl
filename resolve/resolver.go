@@ -2,17 +2,12 @@ package resolve
 
 import (
 	"errors"
+	"log"
 	"net"
 
 	"github.com/bogdanovich/dns_resolver"
 	"github.com/hashicorp/golang-lru"
 )
-
-type cacheItem struct {
-	host  string
-	ip    net.IP
-	cname string
-}
 
 type Resolver struct {
 	resolver     *dns_resolver.DnsResolver
@@ -64,23 +59,27 @@ func (t *Resolver) Resolve(host string) (resolved net.IP, cname string, err erro
 }
 
 func resolveWithCache(host string, resolver *dns_resolver.DnsResolver, cache *lru.Cache) (resolved net.IP, cname string, err error) {
+	var expired bool
 	// Hit cache first
 	tmp, found := cache.Get(host)
-	if !found {
-
+	// Test for old records
+	if found && tmp.(*cacheItem).expired() {
+		expired = true
+		log.Println("Expire cache item for", host)
+	}
+	if !found || expired {
 		// Do resolve
 		resolved, cname, err = resolveWithCname(resolver, host)
-
 		if err != nil {
 			return nil, "", err
 		} else {
-			// resolved = newIP
-			item := cacheItem{host, resolved, cname}
+			// Add to cache
+			item := newCacheItem(host, cname, resolved)
 			cache.Add(host, item)
 		}
 	} else {
 		// log.Println("Resolve cached: ", host)
-		item := tmp.(cacheItem)
+		item := tmp.(*cacheItem)
 		resolved = item.ip
 		cname = item.cname
 	}
