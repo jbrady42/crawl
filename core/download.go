@@ -2,7 +2,7 @@ package core
 
 import (
 	"bytes"
-	"fmt"
+	"encoding/json"
 	"io"
 	"io/ioutil"
 	"log"
@@ -67,10 +67,15 @@ func (t *Crawler) downloadAll(inQ <-chan string, outQ chan<- *data.PageResult) {
 	log.Println("Exiting Download")
 }
 
-func writeStats(workerCount, closingCount, urlCount int) {
-	stats := fmt.Sprintf("%d\t%d\t%d", workerCount, closingCount, urlCount)
-	err := ioutil.WriteFile("/tmp/crawl_stats", []byte(stats), 0644)
-
+func writeStats(stats CrawlStats) {
+	// Build JSON
+	data, err := json.Marshal(stats)
+	if err != nil {
+		log.Println("Error preparing stats")
+		return
+	}
+	// Write to file
+	err = ioutil.WriteFile("/tmp/crawl_stats", data, 0644)
 	if err != nil {
 		log.Println("Can not write stats file")
 	}
@@ -80,15 +85,26 @@ func crwalStatsWorker(hostMap *syncmap.Map) {
 	for {
 		time.Sleep(statsInterval)
 		var count, closeCount int
+		countMap := make(map[string]int)
 		for tmp := range hostMap.Iter() {
+			var tmpCount int
 			worker := tmp.Val.(*HostWorker)
-			count += len(worker.inQ)
+			tmpCount = len(worker.inQ)
 			if worker.closing {
 				log.Println("worker:", worker.key, "close waiting")
 				closeCount++
+				tmpCount++
 			}
+			count += tmpCount
+			countMap[worker.key] = tmpCount
 		}
-		writeStats(hostMap.Len(), closeCount, count)
+		stats := CrawlStats{
+			Workers:     hostMap.Len(),
+			Closing:     closeCount,
+			Urls:        count,
+			WorkerCount: countMap,
+		}
+		writeStats(stats)
 	}
 }
 

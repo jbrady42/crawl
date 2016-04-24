@@ -36,3 +36,10 @@ func newDownloadInfo(s string) *DownloadInfo {
 
 	return &DownloadInfo{Url: urlStr, IP: ip}
 }
+
+type CrawlStats struct {
+	Workers     int
+	Closing     int
+	Urls        int
+	WorkerCount map[string]int
+}
