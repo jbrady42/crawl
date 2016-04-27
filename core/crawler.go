@@ -14,7 +14,7 @@ type Crawler struct {
 	RateBucket   *ratelimit.Bucket
 	MaxPageBytes int
 	IgnoreRobots bool
-	resolver     *resolve.Resolver
+	Resolver     *resolve.Resolver
 	robotsCache  *lru.Cache
 }
 
@@ -32,7 +32,7 @@ func NewCrawler(workers int, groupHost bool, servers []string) *Crawler {
 	robotCache, _ := lru.New(500)
 	crawler.robotsCache = robotCache
 
-	crawler.resolver = resolve.NewWithServers(servers)
+	crawler.Resolver = resolve.NewWithServers(servers)
 
 	// Setup rate limiting
 	//SetRateLimited(0.0)

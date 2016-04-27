@@ -15,17 +15,18 @@ func (t *Crawler) ResolveWorker(inQ <-chan string, outQ chan<- *data.ResolveResu
 	for i := 0; i < t.WorkerCount; i++ {
 		time.Sleep(25 * time.Millisecond)
 
-		go func() {
+		go func(i int) {
 			defer wg.Done()
 			t.resolveWorker(inQ, outQ)
-		}()
+			log.Println("Closing worker ", i)
+		}(i)
 	}
 	log.Println("Waiting on workers")
 	wg.Wait()
 }
 
 func (t *Crawler) resolveWorker(inQ <-chan string, outQ chan<- *data.ResolveResult) {
-	resolveWorker := t.resolver.NewWorker()
+	resolveWorker := t.Resolver.NewWorker()
 
 	for urlStr := range inQ {
 		url := util.ParseUrl(urlStr)

@@ -48,6 +48,11 @@ func resolveMain() {
 	// Setup crawler
 	crawl := core.NewCrawler(workers, false, servers)
 
+	// Set cache size
+	if cacheSize > 0 {
+		crawl.Resolver.ResetCache(cacheSize)
+	}
+
 	go func() {
 		crawl.ResolveWorker(inQ, outQ)
 		close(outQ)
@@ -90,6 +95,7 @@ var resolverStr string
 var groupHost bool
 var ignoreRobot bool
 var siteRoot bool
+var cacheSize int
 
 func main() {
 
@@ -161,6 +167,12 @@ func main() {
 					Value:       "",
 					Usage:       "Comma separated list of resolve servers",
 					Destination: &resolverStr,
+				},
+				cli.IntFlag{
+					Name:        "cache",
+					Value:       0,
+					Usage:       "Max cache items",
+					Destination: &cacheSize,
 				},
 			},
 			Action: func(c *cli.Context) {

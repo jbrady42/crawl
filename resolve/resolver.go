@@ -20,12 +20,14 @@ type ResolveWorker struct {
 	crawlResolve *Resolver
 }
 
+const defaultCacheSize = 1000000
+
 func New() *Resolver {
 	return NewWithServers([]string{})
 }
 
 func NewWithServers(servers []string) *Resolver {
-	cache, _ := lru.New(1000000)
+	cache, _ := lru.New(defaultCacheSize)
 	if len(servers) == 0 {
 		servers = []string{"208.67.222.222", "208.67.220.220", "8.8.8.8", "8.8.4.4"}
 	}
@@ -36,6 +38,12 @@ func NewWithServers(servers []string) *Resolver {
 func (t *Resolver) NewWorker() *ResolveWorker {
 	res := newResolver(t.servers)
 	return &ResolveWorker{res, t}
+}
+
+func (t *Resolver) ResetCache(size int) {
+	log.Println("Reset cache size", size)
+	cache, _ := lru.New(size)
+	t.resolveCache = cache
 }
 
 func newResolver(servers []string) *dns_resolver.DnsResolver {
