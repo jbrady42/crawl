@@ -100,6 +100,10 @@ var cacheSize int
 func main() {
 
 	app := cli.NewApp()
+	app.Name = "crawl"
+	app.Usage = ""
+	app.Description = "A crawler of the Unix philosophy"
+	app.Version = "0.0.5"
 	app.Commands = []cli.Command{
 		{
 			// Extract
