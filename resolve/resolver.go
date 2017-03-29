@@ -52,7 +52,7 @@ func newResolver(servers []string) *dns_resolver.DnsResolver {
 	copy(tmpServer, servers)
 
 	resolver := dns_resolver.New(tmpServer)
-	resolver.ReuseConnection = true
+	// resolver.ReuseConnection = true
 
 	return resolver
 }
@@ -77,7 +77,8 @@ func resolveWithCache(host string, resolver *dns_resolver.DnsResolver, cache *lr
 	}
 	if !found || expired {
 		// Do resolve
-		resolved, cname, err = resolveWithCname(resolver, host)
+		resolved, err = resolve(resolver, host)
+		cname := ""
 		if err != nil {
 			return nil, "", err
 		} else {
@@ -106,21 +107,21 @@ func resolve(resolver *dns_resolver.DnsResolver, host string) (resolved net.IP, 
 	return resolved, nil
 }
 
-func resolveWithCname(resolver *dns_resolver.DnsResolver, host string) (resolved net.IP, name string, err error) {
-	ips, nameList, err := resolver.LookupHostFull(host)
-	if err != nil {
-		return nil, "", err
-	}
+// func resolveWithCname(resolver *dns_resolver.DnsResolver, host string) (resolved net.IP, name string, err error) {
+// 	ips, nameList, err := resolver.LookupHostFull(host)
+// 	if err != nil {
+// 		return nil, "", err
+// 	}
 
-	// Handle ip
-	if len(ips) == 0 {
-		return nil, "", errors.New("No results")
-	} else {
-		resolved = ips[0]
-	}
+// 	// Handle ip
+// 	if len(ips) == 0 {
+// 		return nil, "", errors.New("No results")
+// 	} else {
+// 		resolved = ips[0]
+// 	}
 
-	if len(nameList) > 0 {
-		name = nameList[0]
-	}
-	return resolved, name, nil
-}
+// 	if len(nameList) > 0 {
+// 		name = nameList[0]
+// 	}
+// 	return resolved, name, nil
+// }
