@@ -14,6 +14,7 @@ type Crawler struct {
 	RateBucket   *ratelimit.Bucket
 	MaxPageBytes int
 	IgnoreRobots bool
+	Insecure     bool
 	Resolver     *resolve.Resolver
 	robotsCache  *lru.Cache
 }

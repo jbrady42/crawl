@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"io"
 	"io/ioutil"
@@ -299,6 +300,9 @@ func httpClient(worker *DownloadWorker) (client *http.Client) {
 		},
 		TLSHandshakeTimeout: 40 * time.Second,
 		DisableKeepAlives:   true,
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: worker.crawler.Insecure,
+		},
 	}
 
 	client = &http.Client{

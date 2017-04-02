@@ -22,6 +22,7 @@ func downloadMain() {
 	crawl := core.NewCrawler(workers, groupHost, servers)
 	crawl.MaxPageBytes = sizeLimit
 	crawl.IgnoreRobots = ignoreRobot
+	crawl.Insecure = insecure
 
 	go func() {
 		crawl.Download(inQ, outQ)
@@ -96,6 +97,7 @@ var groupHost bool
 var ignoreRobot bool
 var siteRoot bool
 var cacheSize int
+var insecure bool
 
 func main() {
 
@@ -148,6 +150,11 @@ func main() {
 					Name:        "bad-robot",
 					Usage:       "Disable robots.txt checking",
 					Destination: &ignoreRobot,
+				},
+				cli.BoolFlag{
+					Name:        "insecure",
+					Usage:       "Disable SSL verification",
+					Destination: &insecure,
 				},
 			},
 			Action: func(c *cli.Context) {
